@@ -261,10 +261,10 @@ FDP = function(discovery, flag_list) {
 
 # Data Generator
 
-data_generator = function(data_generation_parameter) {
+data_generator = function(n1, n2, data_generation_parameter) {
   
-  n1=data_generation_parameter$n1
-  n2=data_generation_parameter$n2
+  n1=n1
+  n2=n2
   k=data_generation_parameter$k
   d1=data_generation_parameter$d1
   d2=data_generation_parameter$d2
@@ -319,9 +319,9 @@ information_extractor = function(X1, X2) {
   return (information)
 }
 
-dir_name = function(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha) {
-  n1=data_generation_parameter$n1
-  n2=data_generation_parameter$n2
+dir_name = function(n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha) {
+  n1=n1
+  n2=n2
   k=data_generation_parameter$k
   d1=data_generation_parameter$d1
   d2=data_generation_parameter$d2
@@ -346,7 +346,8 @@ dir_name = function(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_para
 }
 
 file_name = function(rounds, algorithm_list) {
-  file = paste('R=', rounds, '', sep = '')
+  time = Sys.time()
+  file = paste(time, ': R=', rounds, '', sep = '')
   for (code in algorithm_list) {
     file = paste(file, code, sep = ',')
   }
@@ -356,7 +357,12 @@ file_name = function(rounds, algorithm_list) {
 simulator = function(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5)) {
   set.seed(1)
   
-  dir = dir_name(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter,alpha)
+  args = commandArgs(TRUE)
+  
+  n1 = as.integer(args[1])
+  n2 = as.integer(args[2])
+  
+  dir = dir_name(n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter,alpha)
   file = file_name(rounds, algorithm_list)
   
   if (!dir.exists(dir)) {
@@ -378,7 +384,7 @@ simulator = function(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_par
     
     print(paste('Start of round', r))
     
-    output_r = data_generator(data_generation_parameter)
+    output_r = data_generator(n1, n2, data_generation_parameter)
     X1 = output_r$X1
     X2 = output_r$X2
     flag_list = output_r$flag_list
@@ -492,7 +498,8 @@ rounds = 1
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
 algorithm_list = c(1,2,3,4,5)
-data_generation_parameter = data.frame('n1' = 3, 'n2' = 5, 'k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 9, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
+data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
+
 result = simulator(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list)
 
 print(result)
