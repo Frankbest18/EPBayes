@@ -8,8 +8,8 @@ p_tau_j_lambda = function (lambda, par, tau_j, n1, n2) {
   d1 = par[2]
   d2 = par[3]
   tau_j = tau_j
-  #out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2)
-  out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * tau_j^((n1-3)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * (d1/(d2 * k))^(-d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2)
+  out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2) * tau_j
+  #out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * tau_j^((n1-3)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * (d1/(d2 * k))^(-d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2)
 }
 
 logL = function(par, tau, n1, n2) {
@@ -18,8 +18,9 @@ logL = function(par, tau, n1, n2) {
   d1 = par[2]
   d2 = par[3]
   for (tau_j in tau) {
-    p_tau_j = integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value
-    #p_tau_j = tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value
+    #p_tau_j = integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value
+    p_tau_j = tryCatch(tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value / tau_j, error = function(e) {print(par)
+      stop(tau_j)})
     logliklihood = logliklihood + log(p_tau_j)
   }
   
@@ -53,9 +54,9 @@ p_joint_parametric_j = function(lambda, n1, n2, Z1, Z2, S1, S2, par_mle, tau_j) 
   
   f_tau_j_given_lambda = p_tau_j_given_lambda(n1, n2, tau_j, lambda)
   
-  f_tau_j = integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value
+  #f_tau_j = integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value
   
-  #f_tau_j = tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value
+  f_tau_j = tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value / tau_j
   
   out = p_value_given_lambda * f_tau_j_given_lambda * g_lambda_mle / f_tau_j
   
@@ -319,9 +320,10 @@ information_extractor = function(X1, X2) {
   return (information)
 }
 
-dir_name = function(n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha) {
+dir_name = function(n1, n2, seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha) {
   n1=n1
   n2=n2
+  seed = seed
   k=data_generation_parameter$k
   d1=data_generation_parameter$d1
   d2=data_generation_parameter$d2
@@ -341,7 +343,7 @@ dir_name = function(n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE
   B2 = NPMLE_2D_parameter[2]
   l2 = NPMLE_2D_parameter[3]
   u2 = NPMLE_2D_parameter[4]
-  head = paste('(', paste(n1, n2, k, d1, d2,  m,  mu1,  mu2,  mean_var2,  var_var2,  pi0, mu0, B, l1, u1, B1, B2, l2, u2, alpha, rounds, sep = ','), ')', sep = '')
+  head = paste('(', paste(n1, n2, seed, k, d1, d2,  m,  mu1,  mu2,  mean_var2,  var_var2,  pi0, mu0, B, l1, u1, B1, B2, l2, u2, alpha, rounds, sep = ','), ')', sep = '')
   return(head)
 }
 
@@ -354,15 +356,15 @@ file_name = function(rounds, algorithm_list) {
   return (paste('(', file, ')', sep = ''))
 }
 
-simulator = function(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5)) {
-  set.seed(1)
+simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5)) {
+  set.seed(seed)
   
   args = commandArgs(TRUE)
   
   n1 = as.integer(args[1])
   n2 = as.integer(args[2])
   
-  dir = dir_name(n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter,alpha)
+  dir = dir_name(n1, n2, seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter,alpha)
   file = file_name(rounds, algorithm_list)
   
   if (!dir.exists(dir)) {
@@ -494,12 +496,12 @@ simulator = function(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_par
 }
 
 alpha = 0.1
-rounds = 1
+rounds = 50
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-algorithm_list = c(1,2,3,4,5)
+algorithm_list = c(1)
 data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
-
-result = simulator(data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list)
+seed = 3
+result = simulator(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list)
 
 print(result)
