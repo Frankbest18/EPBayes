@@ -344,7 +344,7 @@ dir_name = function(n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE
   B2 = NPMLE_2D_parameter[2]
   l2 = NPMLE_2D_parameter[3]
   u2 = NPMLE_2D_parameter[4]
-  head = paste('(', paste(n1, n2, k, d1, d2,  m,  mu1,  mu2,  mean_var2,  var_var2,  pi0, mu0, B, l1, u1, B1, B2, l2, u2, alpha, rounds, sep = ','), ')', sep = '')
+  head = paste('Simulation_result/(', paste(n1, n2, k, d1, d2,  m,  mu1,  mu2,  mean_var2,  var_var2,  pi0, mu0, B, l1, u1, B1, B2, l2, u2, alpha, rounds, sep = ','), ')', sep = '')
   return(head)
 }
 
@@ -358,6 +358,12 @@ file_name = function(rounds, algorithm_list) {
 }
 
 simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5)) {
+
+  if (!dir.exists('Simulation_result')) {
+    print('Create Data Directory')
+    dir.create('Simulation_result')
+  }
+
   set.seed(seed)
   
   args = commandArgs(TRUE)
