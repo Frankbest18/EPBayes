@@ -8,7 +8,7 @@ p_tau_j_lambda = function (lambda, par, tau_j, n1, n2) {
   d1 = par[2]
   d2 = par[3]
   tau_j = tau_j
-  out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2) * tau_j
+  out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2)
   #out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * tau_j^((n1-3)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * (d1/(d2 * k))^(-d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2)
 }
 
@@ -21,7 +21,7 @@ logL = function(par, tau, n1, n2) {
     #p_tau_j = tryCatch(integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value, error = function(e) {print(par)
       #stop(tau_j)}
     
-    p_tau_j = tryCatch(tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value / tau_j, error = function(e) {print(par)
+    p_tau_j = tryCatch(tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value, error = function(e) {print(par)
       stop(tau_j)})
     logliklihood = logliklihood + log(p_tau_j)
   }
@@ -58,7 +58,7 @@ p_joint_parametric_j = function(lambda, n1, n2, Z1, Z2, S1, S2, par_mle, tau_j) 
   
   #f_tau_j = integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value
   
-  f_tau_j = tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value / tau_j
+  f_tau_j = tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value
   
   out = p_value_given_lambda * f_tau_j_given_lambda * g_lambda_mle / f_tau_j
   
