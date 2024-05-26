@@ -232,6 +232,22 @@ P_value_Welch = function (n1, n2, m, Z1_list, Z2_list, S1_list, S2_list) {
   return (P_value_list_Welch)
 }
 
+# P value calculation for Beherens-Fisher Test
+
+P_value_BF = function(m, X1, X2) {
+  
+  P_list = rep(0, m)
+  
+  for (i in c(1:m)) {
+    X1_i = X1[i, ]
+    X2_i = X2[i, ]
+    P_i = bfTest(X1_i, X2_i)$p.value
+    P_list[i] = P_i
+  }
+  
+  return (P_list)
+}
+
 # BH, Power, FDR
 
 my_BH = function(P, alpha) {
@@ -357,13 +373,13 @@ file_name = function(rounds, algorithm_list) {
   return (paste('(', file, ')', sep = ''))
 }
 
-simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5)) {
-
+simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5,6)) {
+  
   if (!dir.exists('Simulation_result')) {
     print('Create Data Directory')
     dir.create('Simulation_result')
   }
-
+  
   set.seed(seed)
   
   args = commandArgs(TRUE)
@@ -379,10 +395,10 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     dir.create(dir)
   }
   
-  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch')
+  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch', 'B_F')
   
-  FDP_of_algorithms = matrix(0, 5, rounds)
-  Power_of_algorithms = matrix(0, 5, rounds)
+  FDP_of_algorithms = matrix(0, 6, rounds)
+  Power_of_algorithms = matrix(0, 6, rounds)
   
   print('Simulation Start')
   print(paste('Parameters:', file.path(dir, file)))
@@ -477,6 +493,18 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
         FDP_of_algorithms[code, r] = fdp
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
       }
+      
+      if (code == 6) {
+        print(paste('start of', algorithm_name[code]))
+        P_list = P_value_BF(m, X1, X2)
+        #hist(P_list, main = 'B_F', breaks = seq(0, 1, 0.025))
+        discovery = my_BH(P_list, alpha)
+        power = Power(discovery, flag_list)
+        fdp = FDP(discovery, flag_list)
+        Power_of_algorithms[code, r] = power
+        FDP_of_algorithms[code, r] = fdp
+        print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
+      }
     }
     
     print(paste('End of round', r))
@@ -484,9 +512,9 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     
     print('Updating Round Data')
     
-    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r])
+    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r], 'B_F' = Power_of_algorithms[6, 1:r])
     write.csv(power_df_r, file = paste(file.path(dir, file), '_power.csv', sep = ''))
-    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r])
+    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r])
     write.csv(fdp_df_r, file = paste(file.path(dir, file), '_fdp.csv', sep = ''))
     
   }
