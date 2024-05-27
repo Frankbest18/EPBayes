@@ -1,5 +1,6 @@
 library(REBayes)
 library(Rmosek)
+library(asht)
 
 # P value calculator for 1D Parametric MLE
 
@@ -241,7 +242,7 @@ P_value_BF = function(m, X1, X2) {
   for (i in c(1:m)) {
     X1_i = X1[i, ]
     X2_i = X2[i, ]
-    P_i = bfTest(X1_i, X2_i)$p.value
+    P_i = bfTest(X1_i, X2_i, conf.i)$p.value
     P_list[i] = P_i
   }
   
@@ -534,7 +535,7 @@ alpha = 0.1
 rounds = 50
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-algorithm_list = c(1,2,3,4,5)
+algorithm_list = c(6)
 seed = Sys.time()
 data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
 
