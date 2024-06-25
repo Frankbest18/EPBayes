@@ -249,6 +249,20 @@ P_value_BF = function(m, X1, X2) {
   return (P_list)
 }
 
+# P value calculation for Pooled t-test
+
+P_value_pooled_t_test = function (m, X1, X2) {
+  
+  P_value_list_pooled_t_test = rep(0, m)
+  for (i in 1:m) {
+    X1_i = X1[i, ]
+    X2_i = X2[i, ]
+    P_value_list_pooled_t_test[i] = t.test(X1_i, X2_i, var.equal = TRUE)$p.value
+  }
+  
+  return (P_value_list_pooled_t_test)
+}
+
 # BH, Power, FDR
 
 my_BH = function(P, alpha) {
@@ -396,10 +410,10 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     dir.create(dir)
   }
   
-  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch', 'B_F')
+  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch', 'B_F', 'Pooled_t')
   
-  FDP_of_algorithms = matrix(0, 6, rounds)
-  Power_of_algorithms = matrix(0, 6, rounds)
+  FDP_of_algorithms = matrix(0, 7, rounds)
+  Power_of_algorithms = matrix(0, 7, rounds)
   
   print('Simulation Start')
   print(paste('Parameters:', file.path(dir, file)))
@@ -506,6 +520,18 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
         FDP_of_algorithms[code, r] = fdp
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
       }
+
+      if (code == 7) {
+        print(paste('start of', algorithm_name[code]))
+        P_list = P_value_pooled_t_test(m, X1, X2)
+        #hist(P_list, main = 'Pooled_t', breaks = seq(0, 1, 0.025))
+        discovery = my_BH(P_list, alpha)
+        power = Power(discovery, flag_list)
+        fdp = FDP(discovery, flag_list)
+        Power_of_algorithms[code, r] = power
+        FDP_of_algorithms[code, r] = fdp
+        print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
+      }
     }
     
     print(paste('End of round', r))
@@ -513,9 +539,9 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     
     print('Updating Round Data')
     
-    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r], 'B_F' = Power_of_algorithms[6, 1:r])
+    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r], 'B_F' = Power_of_algorithms[6, 1:r], 'Pooled_t' = Power_of_algorithms[7, 1:r])
     write.csv(power_df_r, file = paste(file.path(dir, file), '_power.csv', sep = ''))
-    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r])
+    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r], 'Pooled_t' = FDP_of_algorithms[7, 1:r])
     write.csv(fdp_df_r, file = paste(file.path(dir, file), '_fdp.csv', sep = ''))
     
   }
@@ -535,7 +561,7 @@ alpha = 0.1
 rounds = 50
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-algorithm_list = c(6)
+algorithm_list = c(2,3)
 seed = Sys.time()
 data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
 
