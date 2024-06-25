@@ -1,0 +1,853 @@
+---
+title: "Voom Test"
+output: pdf_document
+date: "2024-05-16"
+---
+
+```{r}
+library(limma)
+library(edgeR)
+source('voomByGroup.R')
+library(ggplot2)
+library(tidyverse)
+```
+
+# load PBMC1 data
+
+```{r}
+counts = readRDS("./PBMC1/counts.rds")
+group = readRDS("./PBMC1/group_id.rds")
+```
+
+```{r}
+group
+```
+
+# Data Filtering
+
+```{r}
+high_expression_counts = counts[rowSums(counts)>50,]
+```
+
+```{r}
+filter = (group == 'HC' | group == 'Asymptomatic')
+```
+
+```{r}
+filtered_counts = high_expression_counts[, filter]
+filtered_group = group[filter]
+```
+
+# Create DGElist
+
+```{r}
+y = DGEList(filtered_counts)
+```
+
+```{r}
+y$samples$group
+y$samples$group = filtered_group
+y$samples$group
+```
+
+# Calculate Normalizing Factors
+
+```{r}
+y = calcNormFactors(y)
+```
+
+```{r}
+y$samples
+```
+# Create the design matrix based on group information.
+
+```{r}
+group_assignment = y$samples$group
+design = model.matrix(~0 + group_assignment)
+design
+```
+
+# my voom
+
+## Normalize library size R
+
+```{r}
+R = y$samples$lib.size * y$samples$norm.factors
+```
+
+```{r}
+design
+```
+
+## Calculate log-cpm
+
+```{r}
+Y = t(log2((t(filtered_counts) + 0.5)/(R+1) * 1e6))
+```
+
+## Normalize log-cpm
+
+```{r}
+Y = normalizeBetweenArrays(Y, method='none')
+```
+
+## Equivalent to linear regression
+
+```{r}
+Y1 = Y[, c(1,2,6,7,8,9,10)]
+Y2 = Y[, c(3,4,5)]
+mean_Y1 = rowMeans(Y1)
+mean_Y2 = rowMeans(Y2)
+var_Y1 = apply(Y1, 1, var)
+var_Y2 = apply(Y2, 1, var)
+n1 = ncol(Y1)
+n2 = ncol(Y2)
+```
+
+### $\hat{\beta}$
+
+```{r}
+beta = cbind(mean_Y1, mean_Y2)
+```
+
+```{r}
+dim(beta)
+```
+
+### $\hat{Y}$
+
+```{r}
+Y_hat = beta %*% t(design)
+```
+
+```{r}
+dim(Y_hat)
+```
+
+### $s_g$
+
+```{r}
+#s = sqrt(rowSums((Y - Y_hat)^2) / (n1+n2-2))
+```
+
+```{r}
+s = sqrt(((n1-1) * var_Y1 + (n2-1) * var_Y2) / (n1+n2-2))
+```
+
+### $r_g$
+
+```{r}
+r = rowMeans(Y) + mean(log2(R+1))-log2(1e6)
+```
+
+### s_g^{0.5}
+
+```{r}
+s_std = sqrt(s)
+```
+
+### lowess()
+
+```{r}
+l = lowess(r, s_std,f=0.5)
+```
+
+```{r}
+plot(r,s_std, xlab="log2( count size + 0.5 )",ylab="Sqrt( standard deviation )",pch=16,cex=0.25)
+title("voom: Mean-variance trend")
+lines(l,col="red")
+```
+### approximated func form of lowess
+
+```{r}
+f = approxfun(l, rule=2, ties=list("ordered", mean))
+```
+
+### lambda
+
+```{r}
+lambda = t(t(Y_hat) + log2(R+1))-log2(1e6)
+```
+
+### w_gi (predicted square root standard deviance of y_gi)
+
+```{r}
+w = 1/(f(lambda)^4)
+dim(w) = dim(Y_hat)
+dim(w)
+```
+
+```{r}
+alpha = 0.1
+NPMLE_1D_parameter = c(1000, 0.01, 1.0)
+NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
+```
+
+## EPB
+
+### Y_A and Y_B
+
+```{r}
+Y_A = Y1
+Y_B = Y2
+```
+
+### extract sufficient statistics
+
+```{r}
+source('EPB.R')
+```
+
+```{r}
+information_original = information_extractor(Y_A, Y_B)
+```
+
+### NPMLE with 1D
+
+```{r}
+p_value_1D_NPMLE_original = P_value_1D_NPMLE(information_original, NPMLE_1D_parameter)
+```
+
+```{r}
+hist(p_value_1D_NPMLE_original)
+```
+
+```{r}
+length(my_BH(p_value_1D_NPMLE_original, alpha))
+```
+
+### NPMLE with 2D
+
+```{r}
+NPMLE_2D_result_original = NPMLE_2D(S1_list = information_original$S1_list, S2_list = information_original$S2_list, B1 = NPMLE_2D_parameter[1], B2 = NPMLE_2D_parameter[2], m = information_original$m, n1 = information_original$n1, n2 = information_original$n2, lower_quantile = NPMLE_2D_parameter[3], upper_quantile = NPMLE_2D_parameter[4])
+```
+
+```{r}
+p_value_2D_NPMLE_original = P_value_2D_NPMLE(information_original, NPMLE_2D_result_original$grid, NPMLE_2D_result_original$mass)
+```
+
+```{r}
+hist(p_value_2D_NPMLE_original)
+```
+
+```{r}
+length(my_BH(p_value_2D_NPMLE_original, alpha))
+```
+
+### NPMLE with 1D projection
+
+```{r}
+lambda_projection_list_original = NPMLE_2D_result_original$grid[, 1] / NPMLE_2D_result_original$grid[, 2]
+```
+
+```{r}
+p_value_1D_projection_original = P_value_1D_projection(information_original, lambda_projection_list_original, NPMLE_2D_result_original$mass)
+```
+
+```{r}
+hist(p_value_1D_projection_original)
+```
+
+```{r}
+length(my_BH(p_value_1D_projection_original, alpha))
+```
+
+### Welch
+
+```{r}
+p_value_Welch_original = P_value_Welch(information_original)
+```
+
+```{r}
+hist(p_value_Welch_original)
+```
+
+```{r}
+length(my_BH(p_value_Welch_original, alpha))
+```
+
+### Pooled_t_test
+
+```{r}
+p_value_t_original = P_value_pooled_t_test(information_original$m, Y_A, Y_B)
+```
+
+```{r}
+hist(p_value_t_original)
+```
+
+```{r}
+length(my_BH(p_value_t_original, alpha))
+```
+
+```{r}
+dis_1D_original = my_BH(p_value_1D_NPMLE_original, alpha)
+dis_2D_original = my_BH(p_value_2D_NPMLE_original, alpha)
+dis_Welch_original = my_BH(p_value_Welch_original, alpha)
+dis_t_original = my_BH(p_value_t_original, alpha)
+```
+
+```{r}
+de_1D_original = rep(0, nrow(Y_A))
+de_1D_original[dis_1D_original] = 1
+
+de_2D_original = rep(0, nrow(Y_A))
+de_2D_original[dis_2D_original] = 1
+
+de_Welch_original = rep(0, nrow(Y_A))
+de_Welch_original[dis_Welch_original] = 1
+
+de_t_original = rep(0, nrow(Y_A))
+de_t_original[dis_t_original] = 1
+```
+
+```{r}
+df_de_original = cbind(de_1D_original, de_2D_original, de_Welch_original, de_t_original)
+colnames(df_de_original) = c("1D_NPMLE", "2D_NPMLE", "Welch", "Pooled t-test")
+vennDiagram(df_de_original, circle.col=c("blue","red","green","grey"))
+```
+
+## EPB with weight info based on voom
+
+### w_A and w_B, Y_A and Y_B
+
+```{r}
+w_A = w[, c(1,2,6,7,8,9,10)]
+w_B = w[, c(3,4,5)]
+
+Y_A = Y1
+Y_B = Y2
+```
+
+### extract sufficient statistics
+
+```{r}
+source('voom_EPB.R')
+```
+
+```{r}
+information = information_extractor(Y_A, Y_B, w_A, w_B)
+```
+
+### NPMLE with 1D
+
+```{r}
+p_value_1D_NPMLE = P_value_1D_NPMLE(information, NPMLE_1D_parameter)
+```
+
+```{r}
+hist(p_value_1D_NPMLE)
+```
+
+```{r}
+length(my_BH(p_value_1D_NPMLE, alpha))
+```
+
+### NPMLE with 2D
+
+```{r}
+NPMLE_2D_result = NPMLE_2D(S1_list = information$S1_list, S2_list = information$S2_list, B1 = NPMLE_2D_parameter[1], B2 = NPMLE_2D_parameter[2], m = information$m, n1 = information$n1, n2 = information$n2, lower_quantile = NPMLE_2D_parameter[3], upper_quantile = NPMLE_2D_parameter[4])
+```
+
+
+```{r}
+df_2D_weighted_voom = data.frame(x = NPMLE_2D_result$grid[, 1], y = NPMLE_2D_result$grid[, 2], prob = NPMLE_2D_result$mass)
+```
+
+```{r}
+write.csv(df_2D_weighted_voom, '2D_weighted_voom.csv')
+```
+
+```{r}
+find_threshold = function(mass, Total_mass = 0.98) {
+  sorted_mass = sort(mass, decreasing = TRUE)
+  sum = 0
+  for (i in c(1:length(mass))) {
+    sum = sum + sorted_mass[i]
+    if (sum >= Total_mass) {
+      return (sorted_mass[i+1])
+    }
+  }
+}
+```
+
+```{r, fig.width=12, fig.height=10}
+Total_mass = 0.99
+threshold_voom = find_threshold(df_2D_weighted_voom$prob, Total_mass = Total_mass)
+size_breaks = exp(seq(log(min(df_2D_weighted_voom$prob[df_2D_weighted_voom$prob > threshold_voom])), log(max(df_2D_weighted_voom$prob)), length.out = 10))
+plot_G_voom = ggplot(df_2D_weighted_voom, aes(x = log(x), y = log(y))) +
+  geom_point(aes(size = ifelse(prob < threshold_voom, NA, prob)), color = "blue", alpha = 0.8) +
+  scale_size_continuous(range = c(0.2, 5), breaks = size_breaks) +  # Adjust the range of point sizes
+  theme_minimal() +
+  labs(title = expression(paste(hat(G)({sigma[A]}^2, {sigma[B]}^2), ' based on Weights Estimated by Voom (Threshold = 0.99)')),
+       x = expression(log({sigma[A]}^2)),
+       y = expression(log({sigma[B]}^2))) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = 'none')
+plot_G_voom
+```
+
+```{r}
+ggsave(filename = 'G(var1, var2) with voom.jpg', plot = plot_G_voom, width = 12, height = 10, dpi = 500)
+```
+
+```{r}
+p_value_2D_NPMLE = P_value_2D_NPMLE(information, NPMLE_2D_result$grid, NPMLE_2D_result$mass)
+```
+
+```{r}
+hist(p_value_2D_NPMLE)
+```
+
+```{r}
+length(my_BH(p_value_2D_NPMLE, alpha))
+```
+
+
+### NPMLE with 1D projection
+
+```{r}
+lambda_projection_list = NPMLE_2D_result$grid[, 1] / NPMLE_2D_result$grid[, 2]
+```
+
+```{r}
+df_lambda = data.frame(x = lambda_projection_list, prob = NPMLE_2D_result$mass)
+```
+
+```{r, fig.width=8, fig.height=6}
+plot_1D_voom = ggplot(df_lambda, aes(x = log(x), y = 0)) +
+  geom_segment(aes(xend = log(x), yend = prob), size = 1, color = "blue") +
+  scale_y_continuous(name = "Density", limits = c(0, max(df_lambda$prob))) +
+  theme_minimal() +
+  labs(title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' based on Weights estimated by Voom')),
+       x = expression(log({sigma[A]}^2/{sigma[B]}^2))) +
+  theme(plot.title = element_text(hjust = 0.5))
+plot_1D_voom
+```
+
+```{r}
+#ggsave(filename = 'G(lambda) by Voom.jpg', plot = plot_1D_voom, width = 8, height = 6, dpi = 500)
+```
+
+```{r}
+df_lambda_with_ecdf = arrange(df_lambda, x) %>% mutate(ecdf = cumsum(prob))
+```
+
+```{r}
+plot(log(df_lambda_with_ecdf$x), df_lambda_with_ecdf$ecdf, xlim = c(-2, 2), type = 'l', col = 'blue')
+```
+
+```{r}
+p_value_1D_projection = P_value_1D_projection(information, lambda_projection_list, NPMLE_2D_result$mass)
+```
+
+```{r}
+hist(p_value_1D_projection)
+```
+
+```{r}
+length(my_BH(p_value_1D_projection, alpha))
+```
+
+### Welch
+
+```{r}
+p_value_Welch = P_value_Welch(information)
+```
+
+```{r}
+hist(p_value_Welch)
+```
+
+```{r}
+length(my_BH(p_value_Welch, alpha))
+```
+
+### Pooled t-test
+
+```{r}
+p_value_t = P_value_pooled_t_test(information)
+```
+
+```{r}
+hist(p_value_t)
+```
+
+```{r}
+length(my_BH(p_value_t, alpha))
+```
+
+```{r}
+dis_1D = my_BH(p_value_1D_NPMLE, alpha)
+dis_2D = my_BH(p_value_2D_NPMLE, alpha)
+dis_Welch = my_BH(p_value_Welch, alpha)
+dis_t = my_BH(p_value_t, alpha)
+```
+
+```{r}
+de_1D = rep(0, nrow(Y_A))
+de_1D[dis_1D] = 1
+
+de_2D = rep(0, nrow(Y_A))
+de_2D[dis_2D] = 1
+
+de_Welch = rep(0, nrow(Y_A))
+de_Welch[dis_Welch] = 1
+
+de_t = rep(0, nrow(Y_A))
+de_t[dis_t] = 1
+```
+
+```{r}
+df_de = cbind(de_1D, de_2D, de_Welch, de_t)
+colnames(df_de) = c("1D_NPMLE", "2D_NPMLE", "Welch", "Pooled t-test")
+vennDiagram(df_de, circle.col=c("blue","red","green","grey"))
+```
+
+## EPB with weight info from voombygroup
+
+### w_A and w_B, Y_A and Y_B
+
+```{r}
+w_vbg = vbg$weights
+w_A = w_vbg[, c(1,2,6,7,8,9,10)]
+w_B = w_vbg[, c(3,4,5)]
+
+Y_A = Y1
+Y_B = Y2
+```
+
+### extract sufficient statistics
+
+```{r}
+source('voom_EPB.R')
+```
+
+```{r}
+information_vbg = information_extractor(Y_A, Y_B, w_A, w_B)
+```
+
+### NPMLE with 1D
+
+```{r}
+p_value_1D_NPMLE_vbg = P_value_1D_NPMLE(information_vbg, NPMLE_1D_parameter)
+```
+
+```{r}
+hist(p_value_1D_NPMLE_vbg)
+```
+
+```{r}
+length(my_BH(p_value_1D_NPMLE_vbg, alpha))
+```
+
+### NPMLE with 2D
+
+```{r}
+NPMLE_2D_result_vbg = NPMLE_2D(S1_list = information_vbg$S1_list, S2_list = information_vbg$S2_list, B1 = NPMLE_2D_parameter[1], B2 = NPMLE_2D_parameter[2], m = information_vbg$m, n1 = information_vbg$n1, n2 = information_vbg$n2, lower_quantile = NPMLE_2D_parameter[3], upper_quantile = NPMLE_2D_parameter[4])
+```
+
+```{r}
+df_2D_weighted_vbg = data.frame(x = NPMLE_2D_result_vbg$grid[, 1], y = NPMLE_2D_result_vbg$grid[, 2], prob = NPMLE_2D_result_vbg$mass)
+```
+
+```{r}
+write.csv(df_2D_weighted_vbg, '2D_weighted_vbg.csv')
+```
+
+```{r, fig.width = 12, flg.height = 10}
+Total_mass = 0.99
+threshold_vbg = find_threshold(df_2D_weighted_vbg$prob, Total_mass = Total_mass)
+size_breaks = exp(seq(log(min(df_2D_weighted_vbg$prob[df_2D_weighted_vbg$prob > threshold_vbg])), log(max(df_2D_weighted_vbg$prob)), length.out = 20))
+plot_G_vbg = ggplot(df_2D_weighted_vbg, aes(x = log(x), y = log(y))) +
+  geom_point(aes(size = ifelse(prob < threshold_vbg, NA, prob)), color = "blue", alpha = 0.8) +
+  scale_size_continuous(range = c(0.2, 5), breaks = size_breaks) +  # Adjust the range of point sizes
+  theme_minimal() +
+  labs(title = expression(paste(hat(G)({sigma[A]}^2, {sigma[B]}^2), ' based on Weights estimated by VoombyGroup (Threshold = 0.99)')),
+       x = expression(log({sigma[A]}^2)),
+       y = expression(log({sigma[B]}^2))) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = 'none')
+plot_G_vbg
+```
+
+```{r}
+#ggsave(filename = 'G(var1, var2) with VoombyGroup.jpg', plot = plot_G_vbg, width = 12, height = 10, dpi = 500)
+```
+
+```{r}
+p_value_2D_NPMLE_vbg = P_value_2D_NPMLE(information_vbg, NPMLE_2D_result_vbg$grid, NPMLE_2D_result_vbg$mass)
+```
+
+```{r}
+hist(p_value_2D_NPMLE_vbg)
+```
+
+```{r}
+length(my_BH(p_value_2D_NPMLE_vbg, alpha))
+```
+
+
+### NPMLE with 1D projection
+
+```{r}
+lambda_projection_list_vbg = NPMLE_2D_result_vbg$grid[, 1] / NPMLE_2D_result_vbg$grid[, 2]
+```
+
+```{r}
+df_lambda_vbg = data.frame(x = lambda_projection_list_vbg, prob = NPMLE_2D_result_vbg$mass)
+```
+
+```{r}
+df_lambda_with_ecdf_vbg = arrange(df_lambda_vbg, x) %>% mutate(ecdf = cumsum(prob))
+```
+
+```{r}
+plot(log(df_lambda_with_ecdf$x), df_lambda_with_ecdf$ecdf, xlim = c(-2, 2), lwd = 1, type = 'l', col = 'blue')
+lines(log(df_lambda_with_ecdf_vbg$x), df_lambda_with_ecdf_vbg$ecdf, col = 'black')
+```
+
+```{r, fig.width=8, fig.height=6}
+plot_1D_vbg = ggplot(df_lambda_vbg, aes(x = log(x), y = 0)) +
+  geom_segment(aes(xend = log(x), yend = prob), size = 1, color = "blue") +
+  scale_y_continuous(name = "Density", limits = c(0, max(df_lambda_vbg$prob))) +
+  theme_minimal() +
+  labs(title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' based on Weights estimated by VoombyGroup')),
+       x = expression(log({sigma[A]}^2/{sigma[B]}^2))) +
+  theme(plot.title = element_text(hjust = 0.5))
+plot_1D_vbg
+```
+```{r}
+#ggsave(filename = 'G(lambda) by VoombyGroup.jpg', plot = plot_1D_vbg, width = 8, height = 6, dpi = 500)
+```
+
+```{r}
+p_value_1D_projection_vbg = P_value_1D_projection(information_vbg, lambda_projection_list_vbg, NPMLE_2D_result_vbg$mass)
+```
+
+```{r}
+hist(p_value_1D_projection_vbg)
+```
+
+```{r}
+length(my_BH(p_value_1D_projection_vbg, alpha))
+```
+
+### Welch
+
+```{r}
+p_value_Welch_vbg = P_value_Welch(information_vbg)
+```
+
+```{r}
+hist(p_value_Welch_vbg)
+```
+
+```{r}
+length(my_BH(p_value_Welch_vbg, alpha))
+```
+
+### Pooled t-test
+
+```{r}
+p_value_t_vbg = P_value_pooled_t_test(information_vbg)
+```
+
+```{r}
+hist(p_value_t_vbg)
+```
+
+```{r}
+length(my_BH(p_value_t_vbg, alpha))
+```
+
+```{r}
+dis_1D_vbg = my_BH(p_value_1D_NPMLE_vbg, alpha)
+dis_2D_vbg = my_BH(p_value_2D_NPMLE_vbg, alpha)
+dis_Welch_vbg = my_BH(p_value_Welch_vbg, alpha)
+dis_t_vbg = my_BH(p_value_t_vbg, alpha)
+```
+
+```{r}
+de_1D_vbg = rep(0, nrow(Y_A))
+de_1D_vbg[dis_1D_vbg] = 1
+
+de_2D_vbg = rep(0, nrow(Y_A))
+de_2D_vbg[dis_2D_vbg] = 1
+
+de_Welch_vbg = rep(0, nrow(Y_A))
+de_Welch_vbg[dis_Welch_vbg] = 1
+
+de_t_vbg = rep(0, nrow(Y_A))
+de_t_vbg[dis_t_vbg] = 1
+```
+
+```{r}
+df_de_vbg = cbind(de_1D_vbg, de_2D_vbg, de_Welch_vbg, de_t_vbg)
+colnames(df_de_vbg) = c("1D_NPMLE", "2D_NPMLE", "Welch", "Pooled t-test")
+vennDiagram(df_de_vbg, circle.col=c("blue","red","green","grey"))
+```
+
+## voom
+
+```{r}
+v = voom(y, design = design, plot = TRUE)
+```
+
+## voomWithQualityWeights without block design
+
+```{r}
+vvqw = voomWithQualityWeights(y, design = design, plot = TRUE)
+```
+
+## voomWithQualityWeights with block design
+
+```{r}
+vvqw_block = voomWithQualityWeights(y, design = design, var.group= group_assignment, plot = TRUE)
+```
+
+## voomByGroup
+
+```{r}
+vbg = voomByGroup(y, design = design, group = group_assignment, plot = 'combine')
+```
+
+
+## Differential expression analysis
+
+### based on my voom
+
+```{r}
+contr.matrix <- makeContrasts(
+  AvsH = group_assignmentAsymptomatic - group_assignmentHC,
+  levels = colnames(design))
+contr.matrix
+```
+
+#### focus on row 1
+
+fit weighted linear model with lmFit
+
+```{r}
+fit <- lmFit(v, design)
+fit$coefficients[1, ]
+```
+
+fit weighted linear model with lm
+
+```{r}
+Y_r1 = Y[1, ]
+X = design
+Dg_r1 = diag(w[1, ])
+```
+
+```{r}
+w_lm_r1 = lm(Y_r1 ~ 0 + X, weights = w[1,])
+w_lm_r1$coefficients
+w_lm_r1$df.residual
+```
+
+directly solve weighted linear model
+
+```{r}
+solve(t(X) %*% Dg_r1 %*% X) %*% t(X) %*% Dg_r1 %*% Y_r1
+```
+
+transform Y and X and solve weighted linear model
+
+```{r}
+Dg_half = Dg_r1^(1/2)
+Y_new = Dg_half %*% Y_r1
+X_new = Dg_half %*% X
+solve(t(X_new) %*% X_new) %*% t(X_new) %*% Y_new
+lm_new = lm(Y_new ~ 0 + X_new)
+sqrt(sum((lm_new$fitted.values - Y_new)^2) / 8)
+```
+
+
+```{r}
+length(fit$sigma)
+dim(Y_hat)
+fit$sigma[1]
+sqrt(sum((w_lm_r1$model$`v$E[1, ]` - w_lm_r1$fitted.values)^2) / 9)
+```
+
+
+```{r}
+#fit
+vfit = contrasts.fit(fit, contrasts=contr.matrix)
+#vfit$coefficients
+#fit$coefficients %*% contr.matrix
+```
+
+```{r}
+tfit = treat(vfit, lfc=0)
+```
+
+```{r}
+length(my_BH(tfit$p.value, alpha))
+hist(tfit$p.value)
+```
+
+
+
+```{r}
+find_de <- function(y, design, contr.matrix) {
+ fit <- lmFit(y, design)
+ vfit <- contrasts.fit(fit, contrasts=contr.matrix)
+ tfit <- treat(vfit, lfc=0)
+ decideTests(tfit) -> de
+ return(de)
+}
+```
+
+```{r,message=FALSE, warning=FALSE}
+fit = lmFit(v, design)
+vfit = contrasts.fit(fit, contrasts=contr.matrix)
+tfit = treat(vfit, lfc=0)
+```
+
+```{r}
+length(my_BH(tfit$p.value, alpha))
+```
+
+```{r,message=FALSE, warning=FALSE}
+fit = lmFit(vvqw, design)
+vfit = contrasts.fit(fit, contrasts=contr.matrix)
+tfit = treat(vfit, lfc=0)
+```
+
+```{r}
+length(my_BH(tfit$p.value, alpha))
+```
+
+```{r,message=FALSE, warning=FALSE}
+fit = lmFit(vvqw_block, design)
+vfit = contrasts.fit(fit, contrasts=contr.matrix)
+tfit = treat(vfit, lfc=0)
+```
+
+```{r}
+length(my_BH(tfit$p.value, alpha))
+```
+
+```{r,message=FALSE, warning=FALSE}
+fit = lmFit(vbg, design)
+vfit = contrasts.fit(fit, contrasts=contr.matrix)
+tfit = treat(vfit, lfc=0)
+```
+
+```{r}
+length(my_BH(tfit$p.value, alpha))
+```
+
+```{r}
+de_v[, 1]
+```
+
+
+```{r}
+cbind(de_v[, 1],de_vvqw[,1],de_vvqw_block[,1],de_vbg[,1]) -> df
+colnames(df) <- c("voom","voomQW","voomQWB","voomByGroup")
+vennDiagram(df, circle.col=c("blue","red","green","grey"))
+```
+
+

@@ -1,0 +1,270 @@
+---
+title: "Welch Simulation"
+author: "Wufang Hong"
+date: "5/13/2024"
+output: pdf_document
+---
+
+# P value calculation for Welch Approximation
+
+```{r}
+Welch_approximation_p = function(n1, n2, Z1, Z2, S1, S2) {
+  dfw = (S1/n1 + S2/n2)^2/(1 / (n1-1) * (S1/n1)^2 + 1 / (n2-1) * (S2/n2)^2)
+  se2 = S1/n1 + S2/n2
+  tw = (Z1 - Z2)/sqrt(se2)
+  p = pt(q = abs(tw), df = dfw, lower.tail = FALSE) * 2
+  return (p)
+}
+```
+
+```{r}
+P_value_Welch = function (n1, n2, m, Z1_list, Z2_list, S1_list, S2_list) {
+
+  P_value_list_Welch = rep(0, m)
+  for (i in 1:m) {
+    P_value_list_Welch[i] = Welch_approximation_p(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], S1 = S1_list[i], S2 = S2_list[i])
+  }
+  
+  return (P_value_list_Welch)
+}
+```
+
+# BH, Power, FDR
+
+```{r}
+my_BH = function(P, alpha) {
+  n = length(P)
+  sorted_index = order(P, decreasing = FALSE)
+  k_list = which(P[sorted_index][1:n] <= (1:n) * alpha / n)
+  if (length(k_list) == 0) {
+    return (c())
+  }
+  else {
+    k = max(k_list)
+    discovery = sorted_index[1:k]
+    return (discovery)
+  }
+}
+```
+
+```{r}
+Power = function(discovery, flag_list) {
+  dis_count = sum(flag_list)
+  true_dis_count = sum(flag_list[discovery])
+  power = true_dis_count/dis_count
+  return (power)
+}
+```
+
+```{r}
+FDP = function(discovery, flag_list) {
+  #null_count = length(flag_list) - sum(flag_list)
+  false_null = length(discovery) - sum(flag_list[discovery])
+  fdp = false_null/max(length(discovery) ,1)
+  return (fdp)
+}
+```
+
+```{r}
+ss_generator_F = function(data_generation_parameter) {
+  
+  n1=data_generation_parameter$n1
+  n2=data_generation_parameter$n2
+  k=data_generation_parameter$k
+  d1=data_generation_parameter$d1
+  d2=data_generation_parameter$d2
+  m=data_generation_parameter$m
+  mu1=data_generation_parameter$mu1
+  mu2=data_generation_parameter$mu2
+  mean_var2 = data_generation_parameter$mean_var2
+  var_var2 = data_generation_parameter$var_var2
+  pi0 = data_generation_parameter$pi0
+  mu0 = data_generation_parameter$mu0
+  
+  null_count = as.integer(pi0 * m)
+  dis_count = m - null_count
+  flag_list = c(rep(0, null_count), rep(1, dis_count)) # 0 for null, 1 for truth
+  
+  lambda = k * rf(m, d1, d2)
+  var2 = abs(rnorm(m, mean_var2, sqrt(var_var2)))
+  var1 = lambda * var2
+  
+  Z1_list = rep(0, m)
+  Z2_list = rep(0, m)
+  S1_list = rep(0, m)
+  S2_list = rep(0, m)
+
+  for (j in 1:m) {
+    if (j <= null_count) {
+      Z1_list[j] = rnorm(1, mu0, sqrt(var1[j]/n1))
+      Z2_list[j] = rnorm(1, mu0, sqrt(var2[j]/n2))
+      
+      S1_list[j] = var1[j] / (n1-1) * rchisq(1, df = n1-1)
+      S2_list[j] = var2[j] / (n2-1) * rchisq(1, df = n2-1)
+    }
+    else {
+      mu1_j = rnorm(1, mean = 0, sd = sqrt(mu1 * var1[j]))
+      Z1_list[j] = rnorm(1, mu1_j, sqrt(var1[j]/n1))
+      Z2_list[j] = rnorm(1, mu2, sqrt(var2[j]/n2))
+      
+      S1_list[j] = var1[j] / (n1-1) * rchisq(1, df = n1-1)
+      S2_list[j] = var2[j] / (n2-1) * rchisq(1, df = n2-1)
+    }
+  }
+  
+  output = list('Z1' = Z1_list, 'S1' = S1_list, 'Z2' = Z2_list, 'S2' = S2_list, 'flag_list' = flag_list)
+  
+  return (output)
+}
+```
+
+```{r}
+Welch_simulator = function(data_generation_parameter, alpha, rounds) {
+  set.seed(2)
+  
+  FDP_of_algorithms = rep(0, rounds)
+  Power_of_algorithms = rep(0, rounds)
+  FDP_of_t = rep(0, rounds)
+  Power_of_t = rep(0, rounds)
+  diff = rep(0, rounds)
+  
+  #print('Simulation Start')
+  
+  for (r in 1:rounds) {
+    
+    #print(paste('Start of round', r))
+    
+    output_r = ss_generator_F(data_generation_parameter)
+    
+    Z1_list = output_r$Z1
+    Z2_list = output_r$Z2
+    S1_list = output_r$S1
+    S2_list = output_r$S2
+    flag_list = output_r$flag_list
+    
+    n1 = data_generation_parameter$n1
+    n2 = data_generation_parameter$n2
+    m = data_generation_parameter$m
+    
+    
+    P_list = P_value_Welch(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list)
+    discovery = my_BH(P_list, alpha)
+    power = Power(discovery, flag_list)
+    fdp = FDP(discovery, flag_list)
+    Power_of_algorithms[r] = power
+    FDP_of_algorithms[r] = fdp
+    
+  }
+  
+  Power = mean(Power_of_algorithms)
+  FDR = mean(FDP_of_algorithms)
+  
+  return (c('power' = Power, 'fdr' = FDR))
+  
+}
+```
+
+```{r}
+alpha = 0.1
+rounds = 100
+data_generation_parameter = data.frame('n1' = 5, 'n2' = 9, 'k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
+```
+
+```{r}
+result = Welch_simulator(data_generation_parameter, alpha, rounds)
+```
+
+```{r}
+n1_range = c(3,4,5,6,7,8,9)
+power_matrix = matrix(0, length(n1_range), 10)
+fdr_matrix = matrix(0, length(n1_range), 10)
+```
+
+```{r}
+nrow(power_matrix)
+ncol(power_matrix)
+```
+
+
+```{r}
+for (n1 in n1_range) {
+  for (n2 in seq(n1, n1 + 9)) {
+    print(c('n1' = n1, 'n2' = n2))
+    data_generation_parameter = data.frame('n1' = n1, 'n2' = n2, 'k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
+    result = Welch_simulator(data_generation_parameter, alpha, rounds)
+    power_matrix[n1-2, n2-n1+1] = result['power']
+    fdr_matrix[n1-2, n2-n1+1] = result['fdr']
+}
+}
+```
+
+```{r}
+n2_list = c()
+for (n1 in n1_range) {
+  for (n2 in seq(n1, n1 + 9)) {
+    n2_list = c(n2_list, n2)
+  }
+}
+```
+
+```{r}
+n1_list = rep(n1_range, each = 10)
+```
+
+```{r}
+power_matrix
+as.vector(t(power_matrix))
+```
+
+
+```{r}
+df_welch_fails = data.frame('n1' = n1_list, 'n2' = n2_list, 'power' = as.vector(t(power_matrix)), 'fdr' = as.vector(t(fdr_matrix)))
+```
+
+```{r}
+write.csv(df_welch_fails, 'Welch_Fails.csv')
+```
+
+# Visualize
+
+```{r}
+seq(1, length(n1_range))
+```
+
+```{r}
+n1_range
+```
+
+
+```{r}
+for (i in seq(1, length(n1_range))) {
+  n1_i = n1_range[i]
+  main = substitute(expression(paste('FDR of Welch Approximation when ', n[1] == N1)), list(N1 = n1_i))
+  plot(seq(n1_i, n1_i + 9), test$fdr[c((n1_i * 10 - 29) : (n1_i * 10 - 20))], type = 'o', pch = 2, lwd = 2, main = eval(main), xlab = expression(n[2]), ylab = 'FDR')
+  axis(1, at = seq(n1_i, n1_i + 9))
+  abline(h = 0.1, col = "blue", lwd = 2, lty = 2)
+}
+```
+
+```{r}
+test = read.csv('./Welch Property Simulation Result/Welch Fails/Welch_Fails.csv')
+```
+
+```{r}
+#test$fdr
+n1_i = 3
+
+
+test$fdr[c((n1_i * 10 - 29) : (n1_i * 10 - 20))]
+```
+
+
+```{r}
+test$
+plot(test$n2[c(1:10)], test$fdr[c(1:10)], type = 'o', pch = 2, lwd = 2, main = paste('FDR of Welch Approximation for n1 =', 3), ylab = 'FDR', xlab = 'n2')
+axis(1, at = seq(n1_i, n1_i + 9))
+abline(h = 0.1, col = "red", lwd = 2, lty = 2)
+```
+
+
+
