@@ -558,7 +558,7 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
 }
 
 alpha = 0.1
-rounds = 50
+rounds = 1
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
 algorithm_list = c(2,3)
