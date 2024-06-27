@@ -1,8 +1,8 @@
 # Data Table Path
-EPB_Power_path = './Seperated Data/EPB/EPB_Power_summary.csv'
-EPB_FDR_path = './Seperated Data/EPB/EPB_FDR_summary.csv'
-Welch_Data_path = './Seperated Data/Welch Property Simulation Data/Welch Fails/Welch_Fails.csv'
-Pooled_t_test_Data_path = './Seperated Data/Pooled_t_test.csv'
+EPB_Power_path = './Separated Data/EPB/EPB_Power_summary.csv'
+EPB_FDR_path = './Separated Data/EPB/EPB_FDR_summary.csv'
+Welch_Data_path = './Separated Data/Welch Property Simulation Data/Welch Fails/Welch_Fails.csv'
+Pooled_t_test_Data_path = './Separated Data/Pooled_t_test.csv'
 
 # Load Seperated Data Tables
 EPB_Power_Data = read.csv(EPB_Power_path)
