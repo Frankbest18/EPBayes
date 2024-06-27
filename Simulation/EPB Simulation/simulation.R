@@ -420,6 +420,8 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
   
   #P_list = NA
   
+  r = 1
+
   while (r <= rounds) {
     
     print(paste('Start of round', r))
@@ -576,7 +578,7 @@ alpha = 0.1
 rounds = 1
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-algorithm_list = c(2,3)
+algorithm_list = c(3,2)
 seed = Sys.time()
 data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
 
