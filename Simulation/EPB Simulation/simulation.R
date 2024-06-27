@@ -541,8 +541,6 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
         FDP_of_algorithms[code, r] = fdp
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
       }
-
-      r = r + 1
     }
     
     if (Rerun) {
@@ -559,6 +557,8 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r], 'Pooled_t' = FDP_of_algorithms[7, 1:r])
     write.csv(fdp_df_r, file = paste(file.path(dir, file), '_fdp.csv', sep = ''))
     
+    r = r + 1
+
   }
   
   print('Simulation Over')
