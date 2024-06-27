@@ -420,9 +420,11 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
   
   #P_list = NA
   
-  for (r in 1:rounds) {
+  while (r <= rounds) {
     
     print(paste('Start of round', r))
+
+    Rerun = FALSE
     
     output_r = data_generator(n1, n2, data_generation_parameter)
     X1 = output_r$X1
@@ -476,6 +478,13 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
         discovery = my_BH(P_list, alpha)
         power = Power(discovery, flag_list)
         fdp = FDP(discovery, flag_list)
+
+        if (power == 0) {
+          print(paste('Error detected and rerun round', r))
+          Rerun = TRUE
+          break
+        }
+
         Power_of_algorithms[code, r] = power
         FDP_of_algorithms[code, r] = fdp
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
@@ -532,8 +541,14 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
         FDP_of_algorithms[code, r] = fdp
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
       }
+
+      r = r + 1
     }
     
+    if (Rerun) {
+      next
+    }
+
     print(paste('End of round', r))
     print('')
     
