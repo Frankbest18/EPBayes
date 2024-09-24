@@ -19,61 +19,81 @@ df_2D_Hedenfalk = read.csv('./Real Dataset Distribution Data/2D_Hedenfalk.csv')
 
 ```{r, fig.width=12, fig.height=10}
 Total_mass = 0.99
-title = expression(paste(hat(G)({sigma[A]}^2, {sigma[B]}^2), ' of Hedenfalk Data (Threshold = 0.99)'))
+title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of the BRCA Data (Threshold = 0.99)'))
 plot_G_Hedenfalk = plotter_2D(Total_mass, df_2D_Hedenfalk, title)
 plot_G_Hedenfalk
 ```
 
 ```{r}
-#ggsave(filename = 'G(var1, var2) with Hedenfalk.jpg', plot = plot_G_Hedenfalk, width = 12, height = 10, dpi = 500)
+#ggsave(filename = 'H(var1, var2) of BRCA.jpg', plot = plot_G_Hedenfalk, width = 12, height = 10, dpi = 500)
 ```
 
-## 1D
+## 1D G
 
 ```{r}
 df_1D_Hedenfalk = data.frame(x = df_2D_Hedenfalk$x/df_2D_Hedenfalk$y, prob = df_2D_Hedenfalk$prob)
 ```
 
 ```{r, fig.width=8, fig.height=6}
-title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of Hedenfalk Data'))
+title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of the BRCA Data'))
 plot_1D_Hedenfalk = plotter_1D(df_1D_Hedenfalk, title)
 plot_1D_Hedenfalk
 ```
 
 ```{r}
-#ggsave(filename = 'G(lambda) of Hedenfalk.jpg', plot = plot_1D_Hedenfalk, width = 8, height = 6, dpi = 500)
+#ggsave(filename = 'G(lambda) of BRCA.jpg', plot = plot_1D_Hedenfalk, width = 8, height = 6, dpi = 500)
 ```
 
+## 1D F
+
+```{r}
+df_1D_F_Hedenfalk = read.csv('./Real Dataset Distribution Data/1D_F_Hedenfalk.csv')
+```
+
+
+```{r}
+df_1D_F_Hedenfalk = data.frame(x = df_1D_F_Hedenfalk$x, prob = df_1D_F_Hedenfalk$prob)
+```
+
+```{r, fig.width=8, fig.height=6}
+title = expression(paste(hat(F)({sigma}^2), ' of the BRCA Data'))
+plot_1D_F_Hedenfalk = plotter_1D_F(df_1D_F_Hedenfalk, title)
+plot_1D_F_Hedenfalk
+```
+
+```{r}
+#ggsave(filename = 'F(var) of BRCA.jpg', plot = plot_1D_F_Hedenfalk, width = 8, height = 6, dpi = 500)
+```
 
 # PBMC1
 
 ## Voom
 
-### 2D
+### 2D H
 
 ```{r}
-df_2D_weighted_voom = read.csv('./Real Dataset Distribution Data/2D_weighted_voom.csv')
+df_2D_weighted_voom = read.csv('./Real Dataset Distribution Data/PBMC1/Mod vs HC/2D_weighted_voom_ModHC.csv')
 ```
 
 ```{r, fig.width=12, fig.height=10}
 Total_mass = 0.99
-title = expression(paste(hat(G)({sigma[A]}^2, {sigma[B]}^2), ' based on Weights Estimated by Voom (Threshold = 0.99)'))
+title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of PBMC1 based on Weights Estimated by Voom (Threshold = 0.99)'))
 plot_G_voom = plotter_2D(Total_mass, df_2D_weighted_voom, title)
 plot_G_voom
 ```
 
 ```{r}
-#ggsave(filename = 'G(var1, var2) with Voom.jpg', plot = plot_G_voom, width = 12, height = 10, dpi = 500)
+#ggsave(filename = 'H(var1, var2) with Voom.jpg', plot = plot_G_voom, width = 12, height = 10, dpi = 500)
 ```
 
-### 1D
+### 1D G
 
 ```{r}
 df_lambda = data.frame(x = df_2D_weighted_voom$x/df_2D_weighted_voom$y, prob = df_2D_weighted_voom$prob)
 ```
 
 ```{r, fig.width=8, fig.height=6}
-title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' based on Weights estimated by Voom'))
+title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of PBMC1 based on Weights estimated by Voom'))
 plot_1D_voom = plotter_1D(df_lambda, title)
 plot_1D_voom
 ```
@@ -82,23 +102,43 @@ plot_1D_voom
 #ggsave(filename = 'G(lambda) by Voom.jpg', plot = plot_1D_voom, width = 8, height = 6, dpi = 500)
 ```
 
+### 1D F
+
+```{r}
+df_1D_F_PBMC1_voom = read.csv('./Real Dataset Distribution Data/PBMC1/Mod vs HC/1D_F_PBMC1_voom_ModHC.csv')
+```
+
+```{r}
+df_1D_F_PBMC1_voom = data.frame(x = df_1D_F_PBMC1_voom$x, prob = df_1D_F_PBMC1_voom$prob)
+```
+
+```{r, fig.width=8, fig.height=6}
+title = expression(paste(hat(F)({sigma}^2), ' of PBMC1 based on weights estimated by Voom'))
+plot_1D_F_PMBC1_voom = plotter_1D_F(df_1D_F_PBMC1_voom, title)
+plot_1D_F_PMBC1_voom
+```
+
+```{r}
+#ggsave(filename = 'F(var) of PBMC1 with voom.jpg', plot = plot_1D_F_PMBC1_voom, width = 8, height = 6, dpi = 500)
+```
+
 ## VoombyGroup
 
 ### 2D
 
 ```{r}
-df_2D_weighted_vbg = read.csv('./Real Dataset Distribution Data/2D_weighted_vbg.csv')
+df_2D_weighted_vbg = read.csv('./Real Dataset Distribution Data/PBMC1/Mod vs HC/2D_weighted_vbg_ModHC.csv')
 ```
 
 ```{r, fig.width=12, fig.height=10}
 Total_mass = 0.99
-title = expression(paste(hat(G)({sigma[A]}^2, {sigma[B]}^2), ' based on Weights estimated by VoombyGroup (Threshold = 0.99)'))
+title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of PBMC1 based on Weights estimated by VoombyGroup (Threshold = 0.99)'))
 plot_G_vbg = plotter_2D(Total_mass, df_2D_weighted_vbg, title)
 plot_G_vbg
 ```
 
 ```{r}
-#ggsave(filename = 'G(var1, var2) with Voombygroup.jpg', plot = plot_G_vbg, width = 12, height = 10, dpi = 500)
+#ggsave(filename = 'H(var1, var2) with Voombygroup.jpg', plot = plot_G_vbg, width = 12, height = 10, dpi = 500)
 ```
 
 ### 1D
@@ -108,7 +148,7 @@ df_lambda_vbg = data.frame(x = df_2D_weighted_vbg$x/df_2D_weighted_vbg$y, prob =
 ```
 
 ```{r, fig.width=8, fig.height=6}
-title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' based on Weights estimated by VoombyGroup'))
+title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of PBMC1 based on Weights estimated by VoombyGroup'))
 plot_1D_vbg = plotter_1D(df_lambda_vbg, title)
 plot_1D_vbg
 ```
@@ -116,3 +156,44 @@ plot_1D_vbg
 ```{r}
 #ggsave(filename = 'G(lambda) by Voombygroup.jpg', plot = plot_1D_vbg, width = 8, height = 6, dpi = 500)
 ```
+
+### 1D F
+
+```{r}
+df_1D_F_PBMC1_vbg = read.csv('./Real Dataset Distribution Data/PBMC1/Mod vs HC/1D_F_PBMC1_vbg_ModHC.csv')
+```
+
+```{r}
+df_1D_F_PBMC1_vbg = data.frame(x = df_1D_F_PBMC1_vbg$x, prob = df_1D_F_PBMC1_vbg$prob)
+```
+
+```{r, fig.width=8, fig.height=6}
+title = expression(paste(hat(F)({sigma}^2), ' of PBMC1 based on weights estimated by VoombyGroup'))
+plot_1D_F_PMBC1_vbg = plotter_1D_F(df_1D_F_PBMC1_vbg, title)
+plot_1D_F_PMBC1_vbg
+```
+
+```{r}
+#ggsave(filename = 'F(var) of PBMC1 with voombygroup.jpg', plot = plot_1D_F_PMBC1_vbg, width = 8, height = 6, dpi = 500)
+```
+
+## Voom vs VoombyGroup
+
+```{r}
+df_lambda_with_ecdf = arrange(df_lambda, x) %>% mutate(ecdf = cumsum(prob))
+```
+
+```{r}
+df_lambda_with_ecdf_vbg = arrange(df_lambda_vbg, x) %>% mutate(ecdf = cumsum(prob))
+```
+
+```{r}
+png("PBMC1 ecdf of G.png", width = 3200, height = 2400, res = 300)
+par(mgp = c(2,0.5,0))
+plot(log(df_lambda_with_ecdf$x), df_lambda_with_ecdf$ecdf, xlim = c(-2, 2), lwd = 2, type = 'l', col = 'blue', xlab = expression(log({sigma[A]}^2/{sigma[B]}^2)), ylab = expression(hat(G)({sigma[A]}^2/{sigma[B]}^2)))
+lines(log(df_lambda_with_ecdf_vbg$x), df_lambda_with_ecdf_vbg$ecdf, col = 'black', lwd = 2, type = 'l')
+legend('topleft', c(expression(paste(hat(G), ' with Voom')), expression(paste(hat(G), ' with VoombyGroup'))), col = c('blue', 'black'), lwd=2, lty = 1, cex = 1)
+dev.off()
+```
+
+

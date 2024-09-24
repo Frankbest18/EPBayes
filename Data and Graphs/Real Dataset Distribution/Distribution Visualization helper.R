@@ -33,3 +33,14 @@ plotter_1D = function(df_1D, title) {
     theme(plot.title = element_text(hjust = 0.5))
   return (plot_1D)
 }
+
+plotter_1D_F = function(df_1D, title) {
+  plot_1D = ggplot(df_1D, aes(x = log(x), y = 0)) +
+    geom_segment(aes(xend = log(x), yend = prob), size = 1, color = "blue") +
+    scale_y_continuous(name = "Density", limits = c(0, max(df_1D$prob))) +
+    theme_minimal() +
+    labs(title = title,
+         x = expression(log({sigma}^2))) +
+    theme(plot.title = element_text(hjust = 0.5))
+  return (plot_1D)
+}

@@ -1,384 +1,9 @@
 ---
-title: "Simulation"
+title: "Hedenfalk"
 author: "Wufang Hong"
 date: "4/18/2024"
 output: pdf_document
 ---
-
-```{r}
-library(REBayes)
-library(Rmosek)
-library(ggplot2)
-```
-
-# P value calculator for 1D Parametric MLE
-
-```{r}
-p_tau_j_lambda = function (lambda, par, tau_j, n1, n2) {
-  k = par[1]
-  d1 = par[2]
-  d2 = par[3]
-  tau_j = tau_j
-  out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2) * tau_j^((n1-3)/2)
-  #out = 1/beta((n1-1)/2, (n2-1)/2) * ((n1-1)/(n2-1))^((n1-1)/2) * tau_j^((n1-3)/2) * lambda^((n2-1)/2) * (lambda + (n1-1)/(n2-1) *tau_j)^(-(n1+n2-2)/2) * 1/beta(d1/2, d2/2) * (d1/(d2 * k))^(-d2/2) * lambda^(d1/2 - 1) * (lambda + (d2 * k)/d1)^(-(d1 + d2)/2)
-}
-```
-
-
-```{r}
-logL = function(par, tau, n1, n2) {
-  logliklihood = 0
-  k = par[1]
-  d1 = par[2]
-  d2 = par[3]
-  for (tau_j in tau) {
-    #p_tau_j = tryCatch((d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value, error = function(e) {print(par)
-      #stop(tau_j)})
-    p_tau_j = (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value
-    #p_tau_j = tryCatch(integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par, tau_j = tau_j, n1 = n1, n2 = n2)$value, error = function(e) {print(par)
-      #stop(tau_j)})
-    logliklihood = logliklihood + log(p_tau_j)
-  }
-  
-  -logliklihood
-}
-```
-
-```{r}
-p_tau_j_given_lambda = function(n1, n2, tau_j, lambda) {
-  out = (1 / lambda) * (1 / beta((n1-1)/2, (n2-1)/2)) * ((n1-1)/(n2-1))^((n1-1)/2) * (tau_j/lambda) ^ ((n1-3)/2) * ((n1-1)/(n2-1)*tau_j/lambda + 1)^(-(n1+n2-2)/2)
-}
-```
-
-```{r}
-p_given_lambda = function(n1, n2, Z1, Z2, S1, S2, lambda) {
-  
-  upper = (Z1 - Z2) * sqrt(n1 + n2 - 2)
-  lower = sqrt((n1-1) * (n2 * lambda + n1) / (n1 * n2 * lambda) * S1 + (n2-1) * (n2 * lambda + n1) / (n1 * n2) * S2)
-  
-  test_stat = upper/lower
-  
-  p = pt(q = abs(test_stat), df = n1 + n2 - 2, lower.tail = FALSE) * 2
-  
-  out = p
-}
-```
-
-```{r}
-p_joint_parametric_j = function(lambda, n1, n2, Z1, Z2, S1, S2, par_mle, tau_j) {
-  k = par_mle[1]
-  d1 = par_mle[2]
-  d2 = par_mle[3]
-  
-  p_value_given_lambda = p_given_lambda(n1, n2, Z1, Z2, S1, S2, lambda)
-  
-  g_lambda_mle = 1 / beta(d1/2, d2/2) * (d1/(d2*k))^(-d2/2) * lambda^(d1/2 - 1) * (lambda + (k * d2)/d1)^(-(d1+d2)/2)
-  
-  f_tau_j_given_lambda = p_tau_j_given_lambda(n1, n2, tau_j, lambda)
-  
-  #f_tau_j = integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value
-  f_tau_j = (d1/(d2 * k))^(-d2/2) * integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = par_mle, tau_j = tau_j, n1 = n1, n2 = n2)$value
-  
-  out = p_value_given_lambda * f_tau_j_given_lambda * g_lambda_mle / f_tau_j
-  
-}
-```
-
-```{r}
-P_value_1D_PMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list) {
-  
-  tau = S1_list/S2_list
-  
-  par_mle = optim(c(5, 5, 5), logL, tau = tau, n1 = n1, n2 = n2, lower = c(0.01, 0.01, 0.01), upper = c(100, 100, 100), method = 'L-BFGS-B')$par
-  
-  print(par_mle)
-  print(logL(par_mle, tau, n1, n2))
-  
-  P_value_list_pmle = rep(0, m)
-  
-  for (i in c(1:m)) {
-    P_value_list_pmle[i] = integrate(p_joint_parametric_j, lower = 0, upper = Inf, n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], S1 = S1_list[i], S2 = S2_list[i], par_mle = par_mle, tau_j = tau[i])$value
-  }
-  
-  return (P_value_list_pmle)
-}
-```
-
-```{r}
-#logL(c(0.01, 0.01, 26.6715856695373), apply(X1, 1, var)/apply(X2, 1, var),2,2
-k = 1.566803
-d1 = 2.799920
-d2 = 89.106762
-n1 = 7
-n2 = 8
-tau_j = 5676.779
-plot(c(exp(seq(log(0.000001), log(1000), length = 1000))), p_tau_j_lambda(c(exp(seq(log(0.000001), log(1000), length = 1000))), c(k, d1, d2), tau_j = tau_j, n1=n1, n2=n2))
-#print(p_tau_j_lambda(0.000001, c(k, d1, d2), tau_j, n1, n2)) * tau_j^((n1-3)/2) * (d1/(d2 * k))^(-d2/2)
-integrate(p_tau_j_lambda, lower = 0, upper = Inf, par = c(k, d1, d2), tau_j = tau_j, n1, n2)$value
-```
-```{r}
-information = information_extractor(X1, X2)
-  n1 = information$n1
-  n2 = information$n2
-  m = information$m
-  Z1_list = information$Z1_list
-  Z2_list = information$Z2_list
-  S1_list = information$S1_list
-  S2_list = information$S2_list
-  tau = S1_list/S2_list
-```
-
-```{r}
-Z1_list[271]
-Z2_list[271]
-S1_list[271]
-S2_list[271]
-tau[271]
-```
-
-
-```{r}
-for (i in c(271:271)) {
-  integrate(p_joint_parametric_j, lower = 0, upper = Inf, n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], S1 = S1_list[i], S2 = S2_list[i], par_mle = c(1.56680, 2.799920,89.106762), tau_j = tau[i], rel.tol=.Machine$double.eps^.05)$value
-  print(i)
-}
-```
-
-# P value calculator for 1D Non-Parametric MLE
-
-```{r}
-mass_given_tau_j = function(n1, n2, grid, mass, tau_j) {
-  f_tau_j_given_grid = p_tau_j_given_lambda(n1, n2, tau_j, grid)
-  f_tau_j_grid = f_tau_j_given_grid * mass
-  post_mass = f_tau_j_grid / sum(f_tau_j_grid)
-  return(post_mass)
-}
-```
-
-```{r}
-p_value_npmle_j = function(n1, n2, Z1, Z2, S1, S2, grid, mass, tau_j) {
-  P_value_joint = p_given_lambda(n1, n2, Z1, Z2, S1, S2, grid)
-  post_mass_j = mass_given_tau_j(n1, n2, grid, mass, tau_j)
-  P_value_j = sum(P_value_joint * post_mass_j)
-  return (P_value_j)
-}
-```
-
-```{r}
-NPMLE_1D = function(tau, B, m, n1, n2, lower_quantile, upper_quantile) {
-  lower = quantile(tau, lower_quantile)
-  upper = quantile(tau, upper_quantile)
-  log_u = seq(log(lower), log(upper), length = B)
-  u = exp(log_u)
-  d = rep(1,B)
-  w = rep(1, m)/m
-  A = outer(tau, u, FUN = p_tau_j_given_lambda, n1 = n1, n2 = n2)
-  result = KWPrimal(A, d, w)
-  mass = result$f/sum(result$f)
-  
-  output = list('grid' = u, 'mass' = mass)
-  
-}
-```
-
-```{r}
-P_value_1D_NPMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, NPMLE_par) {
-  
-  tau = S1_list/S2_list
-  
-  NPMLE_result = NPMLE_1D(tau = tau, m = m, n1 = n1, n2 = n2, B = NPMLE_par[1], lower_quantile = NPMLE_par[2], upper_quantile = NPMLE_par[3])
-  
-  P_value_list_npmle = rep(0, m)
-  for (i in c(1:m)) {
-    P_value_list_npmle[i] = p_value_npmle_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], S1 = S1_list[i], S2 = S2_list[i], NPMLE_result$grid, NPMLE_result$mass, tau[i])
-  }
-  
-  return(P_value_list_npmle)
-}
-```
-
-# P value calculator for 2D Non-Parametric MLE
-
-```{r}
-p_s_j_given_sigma2 = function(n1, n2, s1_j, s2_j, var_pair) {
-  var1 = var_pair[1]
-  var2 = var_pair[2]
-  out = ((n1-1)/var1) * 1 / (2^((n1-1)/2) * gamma((n1-1)/2)) * ((n1-1) * s1_j/var1)^((n1-3)/2) * exp((-1/2) * (n1-1) * s1_j/var1) * ((n2-1)/var2) * 1 / (2^((n2-1)/2) * gamma((n2-1)/2)) * ((n2-1) * s2_j/var2)^((n2-3)/2) * exp((-1/2) * (n2-1) * s2_j/var2)
-}
-```
-
-```{r}
-p_given_var1_var2 = function(n1, n2, Z1, Z2, var_pair) {
-  
-  upper = (Z1 - Z2)
-  lower = sqrt(var_pair[1]/n1 + var_pair[2]/n2)
-  
-  test_stat = as.numeric(unlist(upper/lower))
-  p = pnorm(abs(test_stat), lower.tail = FALSE) * 2
-  
-  out = p
-}
-```
-
-```{r}
-mass_given_tau_j_2D = function(var_pairs, mass, s1_j, s2_j, n1, n2) {
-  f_s_j_given_grid = p_s_j_given_sigma2(n1, n2, s1_j, s2_j,var_pairs)
-  f_s_j_grid = f_s_j_given_grid * mass
-  post_mass = f_s_j_grid / sum(f_s_j_grid)
-  return(post_mass)
-}
-```
-
-```{r}
-p_value_npmle_2D_j = function(n1, n2, Z1, Z2, var_pairs, mass, s1_j, s2_j) {
-  P_value_joint_list = p_given_var1_var2(n1, n2, Z1, Z2, var_pairs)
-  post_mass_j = mass_given_tau_j_2D(var_pairs, mass, s1_j, s2_j, n1, n2)
-  P_value_j = sum(P_value_joint_list * post_mass_j)
-  return (P_value_j)
-}
-```
-
-```{r}
-NPMLE_2D = function(S1_list, S2_list, B1, B2, m, n1, n2, lower_quantile, upper_quantile) {
-  lower1 = quantile(S1_list, lower_quantile)
-  upper1 = quantile(S1_list, upper_quantile)
-  log_u1 = seq(log(lower1), log(upper1), length = B1)
-  u1 = exp(log_u1)
-  
-  lower2 = quantile(S2_list, lower_quantile)
-  upper2 = quantile(S2_list, upper_quantile)
-  log_u2 = seq(log(lower2), log(upper2), length = B2)
-  u2 = exp(log_u2)
-  
-  var_df = data.frame('var1' = rep(u1, each = B2), 'var2' = rep(u2, B1))
-  
-  d = rep(1, B1 * B2)
-  w = rep(1, m)/m
-  
-  A = matrix(0, nrow = m, ncol = B1 * B2)
-  for (i in 1:(B1*B2)) {
-    A[, i] = p_s_j_given_sigma2(n1, n2, S1_list, S2_list, c(var_df[i, 1], var_df[i, 2]))
-  }
-  
-  result = KWPrimal(A, d, w)
-  mass =  result$f/sum(result$f)
-  
-  output = list('grid' = var_df, 'mass' = mass, 'u1' = u1, 'u2' = u2)
-  
-  return (output)
-  
-}
-```
-
-```{r}
-#NPMLE_2D_result = NPMLE_2D(S1_list = S1_list, S2_list = S2_list, m = m, n1 = n1, n2 = n2, B1 = NPMLE_par[1], B2 = NPMLE_par[2], lower_quantile = NPMLE_par[3], upper_quantile = NPMLE_par[4])
-```
-
-```{r}
-P_value_2D_NPMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, grid, mass) {
-  
-  P_value_list_npmle_2D = rep(0, m)
-  for (i in c(1:m)) {
-    P_value_list_npmle_2D[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], grid, mass, S1_list[i], S2_list[i])
-  }
-  
-  return (P_value_list_npmle_2D)
-}
-```
-
-# P value calculation for 1D projection from 2D NPMLE
-
-```{r}
-P_value_1D_projection = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, grid, mass) {
-  tau = S1_list/S2_list
-  P_value_list_npmle_projection = rep(0, m)
-  for (i in c(1:m)) {
-    P_value_list_npmle_projection[i] = p_value_npmle_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], S1 = S1_list[i], S2 = S2_list[i], grid, mass, tau[i])
-  }
-  
-  return (P_value_list_npmle_projection)
-}
-```
-
-# P value calculation for Welch Approximation
-
-```{r}
-Welch_approximation_p = function(n1, n2, Z1, Z2, S1, S2) {
-  dfw = (S1/n1 + S2/n2)^2/(1 / (n1-1) * (S1/n1)^2 + 1 / (n2-1) * (S2/n2)^2)
-  se2 = S1/n1 + S2/n2
-  tw = (Z1 - Z2)/sqrt(se2)
-  p = pt(q = abs(tw), df = dfw, lower.tail = FALSE) * 2
-  return (p)
-}
-```
-
-```{r}
-P_value_Welch = function (n1, n2, m, Z1_list, Z2_list, S1_list, S2_list) {
-  
-  P_value_list_Welch = rep(0, m)
-  for (i in 1:m) {
-    P_value_list_Welch[i] = Welch_approximation_p(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], S1 = S1_list[i], S2 = S2_list[i])
-  }
-  
-  return (P_value_list_Welch)
-}
-```
-
-# BH, Power, FDR
-
-```{r}
-my_BH = function(P, alpha) {
-  n = length(P)
-  sorted_index = order(P, decreasing = FALSE)
-  k_list = which(P[sorted_index][1:n] <= (1:n) * alpha / n)
-  if (length(k_list) == 0) {
-    return (c())
-  }
-  else {
-    k = max(k_list)
-    discovery = sorted_index[1:k]
-    return (discovery)
-  }
-}
-```
-
-```{r}
-Power = function(discovery, flag_list) {
-  dis_count = sum(flag_list)
-  true_dis_count = sum(flag_list[discovery])
-  power = true_dis_count/dis_count
-  return (power)
-}
-```
-
-```{r}
-FDP = function(discovery, flag_list) {
-  #null_count = length(flag_list) - sum(flag_list)
-  false_null = length(discovery) - sum(flag_list[discovery])
-  fdp = false_null/max(length(discovery) ,1)
-  return (fdp)
-}
-```
-
-# Information Extraction
-
-```{r}
-information_extractor = function(X1, X2) {
-  
-  n1 = ncol(X1)
-  n2 = ncol(X2)
-  m = nrow(X1)
-  
-  Z1_list = rowMeans(X1)
-  Z2_list = rowMeans(X2)
-  S1_list = apply(X1,1,var)
-  S2_list = apply(X2,1,var)
-  
-  information = list('n1' = n1, 'n2' = n2, 'm' = m, 'Z1_list' = Z1_list, 'Z2_list' = Z2_list, 'S1_list' = S1_list, 'S2_list' = S2_list)
-  
-  return (information)
-}
-```
 
 ```{r}
 plot_2D = function(u1,u2) {
@@ -386,99 +11,21 @@ plot_2D = function(u1,u2) {
 }
 ```
 
-# Solver
-
-```{r}
-solver = function(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, algorithm_list = c(1,2,3,4,5)) {
-  
-  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch')
-  
-  print('Solver Starts')
-    
-  information = information_extractor(X1, X2)
-  n1 = information$n1
-  n2 = information$n2
-  m = information$m
-  Z1_list = information$Z1_list
-  Z2_list = information$Z2_list
-  S1_list = information$S1_list
-  S2_list = information$S2_list
-    
-  NPMLE_2D_result = NA
-  
-  P_list_1 = NA
-  P_list_2 = NA
-  P_list_3 = NA
-  P_list_4 = NA
-  P_list_5 = NA
-    
-  for (code in algorithm_list) {
-      
-    if (code == 1) {
-      print(paste('start of', algorithm_name[code]))
-      P_list_1 = P_value_1D_PMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list)
-      #discovery = my_BH(P_list_1, alpha)
-    }
-    
-    if (code == 2) {
-      print(paste('start of', algorithm_name[code]))
-      P_list_2 = P_value_1D_NPMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, NPMLE_1D_parameter)
-      #discovery = my_BH(P_list_2, alpha)
-    }
-      
-    if (code == 3) {
-      print(paste('start of', algorithm_name[code]))
-      if (sum(is.na(NPMLE_2D_result)) > 0) {
-        NPMLE_2D_result = NPMLE_2D(S1_list = S1_list, S2_list = S2_list, m = m, n1 = n1, n2 = n2, B1 = NPMLE_2D_parameter[1], B2 = NPMLE_2D_parameter[2], lower_quantile = NPMLE_2D_parameter[3], upper_quantile = NPMLE_2D_parameter[4])        
-      }
-      
-      P_list_3 = P_value_2D_NPMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, NPMLE_2D_result$grid, NPMLE_2D_result$mass)
-      #discovery = my_BH(P_list_3, alpha)
-    }
-      
-    if (code == 4) {
-      print(paste('start of', algorithm_name[code]))
-      if (sum(is.na(NPMLE_2D_result)) > 0) {
-        NPMLE_2D_result = NPMLE_2D(S1_list = S1_list, S2_list = S2_list, m = m, n1 = n1, n2 = n2, B1 = NPMLE_2D_parameter[1], B2 = NPMLE_2D_parameter[2], lower_quantile = NPMLE_2D_parameter[3], upper_quantile =NPMLE_2D_parameter[4])
-      }
-      lambda_projection_list = NPMLE_2D_result$grid[, 1] / NPMLE_2D_result$grid[, 2]
-      P_list_4 = P_value_1D_projection(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, lambda_projection_list, NPMLE_2D_result$mass)
-      #discovery = my_BH(P_list_4, alpha)
-    }
-      
-    if (code == 5) {
-      print(paste('start of', algorithm_name[code]))
-      P_list_5 = P_value_Welch(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list)
-      #discovery = my_BH(P_list_5, alpha)
-    }
-    
-  }
-  
-  print('Solver Ends')
-  print('')
-  
-  if (sum(is.na(NPMLE_2D_result)) > 0) {
-    return (list('1D_MLE' = P_list_1, '1D_NPMLE' = P_list_2, '2D_NPMLE' = P_list_3, '1D_Proj' = P_list_4, 'Welch' = P_list_5))
-  }
-  
-  return (list('1D_MLE' = P_list_1, '1D_NPMLE' = P_list_2, '2D_NPMLE' = P_list_3, '1D_Proj' = P_list_4, 'Welch' = P_list_5, 'grid' = NPMLE_2D_result$grid, 'mass' = NPMLE_2D_result$mass))
-}
-```
-
-# Simulation
-
-```{r}
-alpha = 0.1
-NPMLE_1D_parameter = c(1000, 0.01, 1.0)
-NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-algorithm_list = c(2,3,4,5)
-```
+# Hedenfalk
 
 ```{r}
 library(Equalden.HD)
 data(Hedenfalk)
+source('EPB.R')
 ```
 
+```{r}
+nrow(Hedenfalk)
+```
+
+```{r}
+head(Hedenfalk)
+```
 
 ```{r}
 X1 = Hedenfalk[, 1:7]
@@ -493,13 +40,44 @@ info = information_extractor(X1, X2)
 hist(info$S1_list, breaks = 100)
 hist(info$S2_list, breaks = 100)
 ```
+
 ```{r}
 plot_2D(log(info$S1_list), log(info$S2_list))
 ```
 
 ```{r}
-result = solver(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha, algorithm_list)
+alpha = 0.1
+NPMLE_1D_parameter = c(1000, 0.01, 1.0)
+NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
+EV_NPMLE_1D_parameter = c(80, 0.01, 1.0)
+algorithm_list = c(1,2,3,4,5,6)
 ```
+
+```{r}
+result = solver(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_parameter, alpha, algorithm_list)
+```
+
+```{r}
+hist(result$`1D_NPMLE`, breaks = 50, main = '1D_NPMLE')
+hist(result$`2D_NPMLE`,breaks = 50, main = '2D_NPMLE')
+hist(result$Welch,breaks = 50, main = 'Welch')
+hist(result$`Pooled_t`,breaks = 50, main = 'Pooled_t')
+hist(result$`B_F`,breaks = 50, main = 'B_F')
+hist(result$`EV_NPMLE`,breaks = 50, main = 'EV_NPMLE')
+```
+
+```{r}
+length(my_BH(result$`1D_NPMLE`, 0.1))
+length(my_BH(result$`2D_NPMLE`, 0.1))
+length(my_BH(result$Welch, 0.1))
+length(my_BH(result$`Pooled_t`, 0.1))
+length(my_BH(result$`B_F`, 0.1))
+length(my_BH(result$`EV_NPMLE`, 0.1))
+```
+
+# Visualization of \hat{G} and \hat{H} and \hat{F}
+
+## \hat{H}
 
 ```{r}
 df_Hedenfalk = data.frame(x = result$grid[,1], y = result$grid[,2], prob = result$mass)
@@ -512,7 +90,6 @@ write.csv(df_Hedenfalk, '2D_Hedenfalk.csv')
 ```{r}
 sum(sort(df_Hedenfalk$prob, decreasing = TRUE)[1:850])
 ```
-
 
 ```{r}
 total = 1000000
@@ -555,6 +132,8 @@ plot_G_voom = ggplot(df_Hedenfalk, aes(x = log(x), y = log(y))) +
 plot_G_voom
 ```
 
+## \hat{G}
+
 ```{r}
 lambda_projection_list_Hedenfalk = result$grid[,1] / result$grid[,2]
 ```
@@ -575,30 +154,43 @@ plot_1D_Hedenfalk
 ```
 
 ```{r}
-ggsave(filename = 'G(lambda) of Hedenfalk.jpg', plot = plot_1D_voom, width = 8, height = 6, dpi = 500)
+ggsave(filename = 'G(lambda) of Hedenfalk.jpg', plot = plot_1D_Hedenfalk, width = 8, height = 6, dpi = 500)
+```
+
+## \hat{F}
+
+```{r}
+EV_NPMLE_1D_F = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+  
+  S_list = c(S1_list, S2_list)
+  
+  lower = quantile(S_list, lower_quantile)
+  upper = quantile(S_list, upper_quantile)
+  log_u = seq(log(lower), log(upper), length = B)
+  u = exp(log_u)
+  d = rep(1,B)
+  w = rep(1, m * 2) / (m * 2) 
+  A1 = outer(S1_list, u, FUN = p_s_j_given_sigma2_EV, n = n1)
+  A2 = outer(S2_list, u, FUN = p_s_j_given_sigma2_EV, n = n2)
+  A = rbind(A1, A2)
+  result = KWPrimal(A, d, w)
+  mass = result$f/sum(result$f)
+  
+  output = list('grid' = u, 'mass' = mass)
+}
 ```
 
 ```{r}
-hist(result$`1D_NPMLE`, breaks = 50, main = '1D_NPMLE')
-hist(result$`1D_Proj`,breaks = 50, main = '1D_Proj')
-hist(result$`2D_NPMLE`,breaks = 50, main = '2D_NPMLE')
-hist(result$Welch,breaks = 50, main = 'Welch')
+hat_F = EV_NPMLE_1D_F(info$S1_list, info$S2_list, EV_NPMLE_1D_parameter[1], info$m, info$n1, info$n2, EV_NPMLE_1D_parameter[2], EV_NPMLE_1D_parameter[3])
 ```
 
 ```{r}
-length(my_BH(result$`1D_NPMLE`, 0.1))
-length(my_BH(result$`1D_Proj`, 0.1))
-length(my_BH(result$`2D_NPMLE`, 0.1))
-length(my_BH(result$Welch, 0.1))
+df_1D_F_Hedenfalk = data.frame(x = hat_F$grid, prob = hat_F$mass)
 ```
 
-
-
-
-
-
-
-
+```{r}
+write.csv(df_1D_F_Hedenfalk, '1D_F_Hedenfalk.csv')
+```
 
 
 

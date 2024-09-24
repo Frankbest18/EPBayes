@@ -8,8 +8,8 @@ output: pdf_document
 # Dataloader
 
 ```{r}
-Full_FDR_Data = read.csv('./Full Data/Full_FDR_Data.csv')
-Full_Power_Data = read.csv('./Full Data/Full_Power_Data.csv')
+Full_FDR_Data = read.csv('./Full Data/Full_FDR_Data_test.csv')
+Full_Power_Data = read.csv('./Full Data/Full_Power_Data_test.csv')
 ```
 
 ```{r}

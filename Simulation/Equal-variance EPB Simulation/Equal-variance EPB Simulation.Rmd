@@ -1,0 +1,273 @@
+---
+title: "Equal-variance NPMLE Simulation"
+author: "Wufang Hong"
+date: "9/14/2024"
+output: pdf_document
+---
+
+```{r}
+source('EPB.R')
+```
+
+# Power, FDR
+
+```{r}
+Power = function(discovery, flag_list) {
+  dis_count = sum(flag_list)
+  true_dis_count = sum(flag_list[discovery])
+  power = true_dis_count/dis_count
+  return (power)
+}
+```
+
+```{r}
+FDP = function(discovery, flag_list) {
+  #null_count = length(flag_list) - sum(flag_list)
+  false_null = length(discovery) - sum(flag_list[discovery])
+  fdp = false_null/max(length(discovery) ,1)
+  return (fdp)
+}
+```
+
+# data generator
+
+```{r}
+data_generator = function(n1, n2, data_generation_parameter, equ_var) {
+  
+  n1=n1
+  n2=n2
+  k=data_generation_parameter$k
+  d1=data_generation_parameter$d1
+  d2=data_generation_parameter$d2
+  m=data_generation_parameter$m
+  mu1=data_generation_parameter$mu1
+  mu2=data_generation_parameter$mu2
+  mean_var2 = data_generation_parameter$mean_var2
+  var_var2 = data_generation_parameter$var_var2
+  pi0 = data_generation_parameter$pi0
+  mu0 = data_generation_parameter$mu0
+  
+  null_count = as.integer(pi0 * m)
+  dis_count = m - null_count
+  flag_list = c(rep(0, null_count), rep(1, dis_count)) # 0 for null, 1 for truth
+  
+  lambda = k * rf(m, d1, d2)
+  var2 = abs(rnorm(m, mean_var2, sqrt(var_var2)))
+  var1 = lambda * var2
+  if (equ_var) {
+    var1 = var2
+  }
+  
+  X1 = matrix(0, m, n1)
+  X2 = matrix(0, m, n2)
+  
+  for (j in 1:m) {
+    if (j <= null_count) {
+      X1[j, ] = rnorm(n1, mu0, sqrt(var1[j]))
+      X2[j, ] = rnorm(n2, mu0, sqrt(var2[j]))
+    }
+    else {
+      X1[j, ] = rnorm(n1, rnorm(1, mean = 0, sd = sqrt(mu1 * var1[j])), sqrt(var1[j]))
+      X2[j, ] = rnorm(n2, mu2, sqrt(var2[j]))
+    }
+  }
+  
+  output = list('X1' = X1, 'X2' = X2, 'flag_list' = flag_list)
+  
+  return (output)
+}
+```
+
+# hyperparameters
+
+```{r}
+seed = 2
+set.seed(seed)
+alpha = 0.1
+rounds = 50
+NPMLE_1D_parameter = c(1000, 0.01, 1.0)
+NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
+EV_NPMLE_1D_parameter = c(80, 0.01, 1.0)
+equ_var = TRUE
+data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
+```
+
+```{r}
+n1 = 5
+n2 = 7
+```
+
+# single round of simulation
+
+```{r}
+output_r = data_generator(n1, n2, data_generation_parameter, equ_var)
+X1 = output_r$X1
+X2 = output_r$X2
+flag_list = output_r$flag_list
+#flag_list = rep(1, m)
+information = information_extractor(X1, X2)
+n1 = information$n1
+n2 = information$n2
+m = information$m
+Z1_list = information$Z1_list
+Z2_list = information$Z2_list
+S1_list = information$S1_list
+S2_list = information$S2_list
+```
+
+# P value calculation for Equal-variance NPMLE
+
+```{r}
+p_s_j_given_sigma2_EV = function(n, s_j, var) {
+  out = ((n-1)/var) * 1 / (2^((n-1)/2) * gamma((n-1)/2)) * ((n-1) * s_j/var)^((n-3)/2) * exp((-1/2) * (n-1) * s_j/var)
+}
+```
+
+```{r}
+EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+  
+  S_list = c(S1_list, S2_list)
+  
+  lower = quantile(S_list, lower_quantile)
+  upper = quantile(S_list, upper_quantile)
+  log_u = seq(log(lower), log(upper), length = B)
+  u = exp(log_u)
+  d = rep(1,B)
+  w = rep(1, m * 2) / (m * 2) 
+  A1 = outer(S1_list, u, FUN = p_s_j_given_sigma2_EV, n = n1)
+  A2 = outer(S2_list, u, FUN = p_s_j_given_sigma2_EV, n = n2)
+  A = rbind(A1, A2)
+  result = KWPrimal(A, d, w)
+  mass = result$f/sum(result$f)
+  
+  var_df = data.frame('var1' = rep(u, each = B), 'var2' = rep(u, B))
+  pair_mass = as.vector(outer(mass, mass, FUN = "*"))
+  
+  output = list('grid' = var_df, 'mass' = pair_mass)
+}
+```
+
+```{r}
+P_value_EV_NPMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, EV_NPMLE_1D_parameter) {
+  EV_NPMLE_result = EV_NPMLE_1D(S1_list, S2_list, B = EV_NPMLE_1D_parameter[1], m, n1, n2, lower_quantile = EV_NPMLE_1D_parameter[2], upper_quantile = EV_NPMLE_1D_parameter[3])
+  P_value_list_EV_npmle = rep(0, m)
+  for (i in c(1:m)) {
+    P_value_list_EV_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], NPMLE_result$grid, NPMLE_result$mass, S1_list[i], S2_list[i])
+  }
+  return(P_value_list_EV_npmle)
+}
+```
+
+```{r}
+EV_NPMLE_result = EV_NPMLE_1D(S1_list, S2_list, B = EV_NPMLE_1D_parameter[1], m, n1, n2, lower_quantile = EV_NPMLE_1D_parameter[2], upper_quantile = EV_NPMLE_1D_parameter[3])
+```
+
+```{r}
+P_value_list_EV_npmle = rep(0, m)
+```
+
+```{r}
+for (i in c(1:m)) {
+    P_value_list_EV_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EV_NPMLE_result$grid, EV_NPMLE_result$mass, S1_list[i], S2_list[i])
+  }
+```
+
+```{r}
+P_test = P_value_EV_NPMLE(information, EV_NPMLE_1D_parameter)
+```
+
+```{r}
+discovery = my_BH(P_test, alpha)
+```
+
+```{r}
+power = Power(discovery, flag_list)
+fdp = FDP(discovery, flag_list)
+```
+
+```{r}
+print(power)
+print(fdp)
+```
+
+
+```{r}
+P_list = P_value_EV_EPB(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list,NPMLE_1D_parameter)
+```
+
+
+```{r}
+EVEPB_simulator = function(data_generation_parameter, alpha, rounds) {
+  set.seed(2)
+  
+  FDP_of_algorithms = rep(0, rounds)
+  Power_of_algorithms = rep(0, rounds)
+  
+  #print('Simulation Start')
+  n1 = data_generation_parameter$n1
+  n2 = data_generation_parameter$n2
+  m = data_generation_parameter$m
+  
+  for (r in 1:rounds) {
+    
+    print(paste('Start of round', r))
+    
+    output_r = data_generator(data_generation_parameter)
+    
+    X1 = output_r$X1
+    X2 = output_r$X2
+    flag_list = output_r$flag_list
+
+    
+    P_list_r = rep(0, m)
+    
+    for (i in c(1:m)) {
+      X1_i = X1[i, ]
+      X2_i = X2[i, ]
+      P_i = bfTest(X1_i, X2_i, mu = 0)$p.value
+      P_list_r[i] = P_i
+    }
+    
+    discovery = my_BH(P_list_r, alpha)
+    power = Power(discovery, flag_list)
+    fdp = FDP(discovery, flag_list)
+    Power_of_algorithms[r] = power
+    FDP_of_algorithms[r] = fdp
+  }
+  
+  Power = mean(Power_of_algorithms)
+  FDR = mean(FDP_of_algorithms)
+  
+  return (c('power' = Power, 'fdr' = FDR))
+  
+}
+```
+
+```{r}
+n1_range = c(3,4,5,6,7)
+power_matrix = matrix(0, length(n1_range), 7)
+fdr_matrix = matrix(0, length(n1_range), 7)
+```
+
+```{r}
+nrow(power_matrix)
+ncol(power_matrix)
+write.table(data.frame('n1','n2', 'power', 'fdr'), file = './B_F.csv', sep = ',', col.names = FALSE, row.names = FALSE)
+```
+
+```{r}
+for (n1 in n1_range) {
+  for (n2 in seq(n1, n1 + 6)) {
+    print(c('n1' = n1, 'n2' = n2))
+    rounds = 50
+    alpha = 0.1
+    data_generation_parameter = data.frame('n1' = n1, 'n2' = n2, 'k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
+    result = BF_simulator(data_generation_parameter, alpha, rounds)
+    power_matrix[n1-2, n2-n1+1] = result['power']
+    fdr_matrix[n1-2, n2-n1+1] = result['fdr']
+    
+    data_n1_n2 = data.frame('n1' = n1, 'n2' = n2, 'power' = result['power'], 'fdr' = result['fdr'])
+    write.table(data_n1_n2, file = './B_F.csv', sep = ',', col.names = FALSE, row.names = FALSE, append = TRUE)
+  }
+}
+```
