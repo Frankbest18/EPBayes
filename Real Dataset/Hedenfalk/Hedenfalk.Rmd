@@ -49,12 +49,13 @@ plot_2D(log(info$S1_list), log(info$S2_list))
 alpha = 0.1
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-EV_NPMLE_1D_parameter = c(80, 0.01, 1.0)
-algorithm_list = c(1,2,3,4,5,6)
+EVD_NPMLE_1D_parameter = c(80, 0.01, 1.0)
+EV_NPMLE_1D_parameter = c(1000, 0.01, 1.0)
+algorithm_list = c(1,2,3,4,5,6,7)
 ```
 
 ```{r}
-result = solver(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_parameter, alpha, algorithm_list)
+result = solver(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, alpha, algorithm_list)
 ```
 
 ```{r}
@@ -63,8 +64,10 @@ hist(result$`2D_NPMLE`,breaks = 50, main = '2D_NPMLE')
 hist(result$Welch,breaks = 50, main = 'Welch')
 hist(result$`Pooled_t`,breaks = 50, main = 'Pooled_t')
 hist(result$`B_F`,breaks = 50, main = 'B_F')
+hist(result$`EVD_NPMLE`,breaks = 50, main = 'EVD_NPMLE')
 hist(result$`EV_NPMLE`,breaks = 50, main = 'EV_NPMLE')
 ```
+
 
 ```{r}
 length(my_BH(result$`1D_NPMLE`, 0.1))
@@ -72,6 +75,7 @@ length(my_BH(result$`2D_NPMLE`, 0.1))
 length(my_BH(result$Welch, 0.1))
 length(my_BH(result$`Pooled_t`, 0.1))
 length(my_BH(result$`B_F`, 0.1))
+length(my_BH(result$`EVD_NPMLE`, 0.1))
 length(my_BH(result$`EV_NPMLE`, 0.1))
 ```
 

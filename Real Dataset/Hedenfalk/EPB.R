@@ -240,13 +240,13 @@ P_value_pooled_t_test = function (m, X1, X2) {
   return (P_value_list_pooled_t_test)
 }
 
-# P value calculation for EV-NPMLE
+# P value calculation for EVD-NPMLE
 
-p_s_j_given_sigma2_EV = function(n, s_j, var) {
+p_s_j_given_sigma2_EV= function(n, s_j, var) {
   out = ((n-1)/var) * 1 / (2^((n-1)/2) * gamma((n-1)/2)) * ((n-1) * s_j/var)^((n-3)/2) * exp((-1/2) * (n-1) * s_j/var)
 }
 
-EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+EVD_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
   
   S_list = c(S1_list, S2_list)
   
@@ -268,6 +268,78 @@ EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_qua
   output = list('grid' = var_df, 'mass' = pair_mass)
 }
 
+P_value_EVD_NPMLE = function(info, EVD_NPMLE_1D_parameter) {
+  
+  n1 = info$n1
+  n2 = info$n2
+  m = info$m
+  Z1_list = info$Z1_list 
+  Z2_list = info$Z2_list
+  S1_list = info$S1_list
+  S2_list = info$S2_list
+  
+  EVD_NPMLE_result = EVD_NPMLE_1D(S1_list, S2_list, B = EVD_NPMLE_1D_parameter[1], m, n1, n2, lower_quantile = EVD_NPMLE_1D_parameter[2], upper_quantile = EVD_NPMLE_1D_parameter[3])
+  
+  P_value_list_EVD_npmle = rep(0, m)
+  for (i in c(1:m)) {
+    P_value_list_EVD_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EVD_NPMLE_result$grid, EVD_NPMLE_result$mass, S1_list[i], S2_list[i])
+  }
+  return(P_value_list_EVD_npmle)
+}
+
+# P value calculation for EV-NPMLE
+
+EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+  
+  S_list = c(S1_list, S2_list)
+  
+  lower = quantile(S_list, lower_quantile)
+  upper = quantile(S_list, upper_quantile)
+  log_u = seq(log(lower), log(upper), length = B)
+  u = exp(log_u)
+  d = rep(1,B)
+  w = rep(1, m * 2) / (m * 2) 
+  A1 = outer(S1_list, u, FUN = p_s_j_given_sigma2_EV, n = n1)
+  A2 = outer(S2_list, u, FUN = p_s_j_given_sigma2_EV, n = n2)
+  A = rbind(A1, A2)
+  result = KWPrimal(A, d, w)
+  mass = result$f/sum(result$f)
+  
+  output = list('grid' = u, 'mass' = mass)
+}
+
+p_given_sigma2 = function(n1, n2, Z1, Z2, var) {
+  
+  upper = (Z1 - Z2)
+  lower = sqrt(var * (1/n1 + 1/n2))
+  
+  test_stat = upper/lower
+  
+  p = pnorm(abs(test_stat), lower.tail = FALSE) * 2
+  
+  out = p
+}
+
+p_s1_s2_given_sigma2 = function(n1, n2, s1_j, s2_j, var) {
+  p_s1_given_sigma2 = p_s_j_given_sigma2_EV(n1, s1_j, var)
+  p_s2_given_sigma2 = p_s_j_given_sigma2_EV(n2, s2_j, var)
+  return (p_s1_given_sigma2 * p_s2_given_sigma2)
+}
+
+mass_given_s1_s2 = function(grid, mass, s1_j, s2_j, n1, n2) {
+  p_s1_s2_given_grid = p_s1_s2_given_sigma2(n1, n2, s1_j, s2_j, grid)
+  p_s1_s2_grid = p_s1_s2_given_grid * mass
+  post_mass = p_s1_s2_grid / sum(p_s1_s2_grid)
+  return(post_mass)
+}
+
+p_value_EV_npmle_j = function(n1, n2, Z1, Z2, grid, mass, s1_j, s2_j) {
+  P_value_joint_list_j = p_given_sigma2(n1, n2, Z1, Z2, grid)
+  post_mass_j = mass_given_s1_s2(grid, mass, s1_j, s2_j, n1, n2)
+  P_value_j = sum(P_value_joint_list_j * post_mass_j)
+  return (P_value_j)
+}
+
 P_value_EV_NPMLE = function(info, EV_NPMLE_1D_parameter) {
   
   n1 = info$n1
@@ -282,8 +354,9 @@ P_value_EV_NPMLE = function(info, EV_NPMLE_1D_parameter) {
   
   P_value_list_EV_npmle = rep(0, m)
   for (i in c(1:m)) {
-    P_value_list_EV_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EV_NPMLE_result$grid, EV_NPMLE_result$mass, S1_list[i], S2_list[i])
+    P_value_list_EV_npmle[i] = p_value_EV_npmle_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EV_NPMLE_result$grid, EV_NPMLE_result$mass, S1_list[i], S2_list[i])
   }
+  
   return(P_value_list_EV_npmle)
 }
 
@@ -323,9 +396,9 @@ information_extractor = function(X1, X2) {
 
 # solver
 
-solver = function(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_parameter, alpha, algorithm_list = c(1,2,3,4,5,6)) {
+solver = function(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, alpha, algorithm_list) {
   
-  algorithm_name = c('1D_NPMLE', '2D_NPMLE', 'Welch', 'Pooled_t', 'B_F', 'EV_NPMLE')
+  algorithm_name = c('1D_NPMLE', '2D_NPMLE', 'Welch', 'Pooled_t', 'B_F', 'EVD_NPMLE', 'EV_NPMLE')
   
   print('Solver Starts')
   
@@ -339,6 +412,7 @@ solver = function(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_pa
   P_list_4 = NA
   P_list_5 = NA
   P_list_6 = NA
+  P_list_7 = NA
   
   for (code in algorithm_list) {
     
@@ -375,7 +449,12 @@ solver = function(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_pa
     
     if (code == 6) {
       print(paste('start of', algorithm_name[code]))
-      P_list_6 = P_value_EV_NPMLE(information, EV_NPMLE_1D_parameter)
+      P_list_6 = P_value_EVD_NPMLE(information, EVD_NPMLE_1D_parameter)
+    }
+    
+    if (code == 7) {
+      print(paste('start of', algorithm_name[code]))
+      P_list_7 = P_value_EV_NPMLE(information, EV_NPMLE_1D_parameter)
     }
     
   }
@@ -384,8 +463,8 @@ solver = function(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_pa
   print('')
   
   if (sum(is.na(NPMLE_2D_result)) > 0) {
-    return (list('1D_NPMLE' = P_list_1, '2D_NPMLE' = P_list_2, 'Welch' = P_list_3, 'Pooled_t' = P_list_4, 'B_F' = P_list_5, 'EV_NPMLE' = P_list_6))
+    return (list('1D_NPMLE' = P_list_1, '2D_NPMLE' = P_list_2, 'Welch' = P_list_3, 'Pooled_t' = P_list_4, 'B_F' = P_list_5, 'EVD_NPMLE' = P_list_6, 'EV_NPMLE' = P_list_7))
   }
   
-  return (list('1D_NPMLE' = P_list_1, '2D_NPMLE' = P_list_2, 'Welch' = P_list_3, 'Pooled_t' = P_list_4, 'B_F' = P_list_5, 'EV_NPMLE' = P_list_6, 'grid' = NPMLE_2D_result$grid, 'mass' = NPMLE_2D_result$mass))
+  return (list('1D_NPMLE' = P_list_1, '2D_NPMLE' = P_list_2, 'Welch' = P_list_3, 'Pooled_t' = P_list_4, 'B_F' = P_list_5, 'EVD_NPMLE' = P_list_6, 'EV_NPMLE' = P_list_7, 'grid' = NPMLE_2D_result$grid, 'mass' = NPMLE_2D_result$mass))
 }

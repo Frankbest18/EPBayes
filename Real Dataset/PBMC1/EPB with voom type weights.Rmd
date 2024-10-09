@@ -184,7 +184,8 @@ dim(w)
 alpha = 0.1
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-EV_NPMLE_1D_parameter = c(80, 0.01, 1.0)
+EVD_NPMLE_1D_parameter = c(80, 0.01, 1.0)
+EV_NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 ```
 
 ## EPB
@@ -483,18 +484,18 @@ hist(p_value_t)
 length(my_BH(p_value_t, alpha))
 ```
 
-### EV-NPMLE
+### EVD-NPMLE
 
 ```{r}
-p_value_EV = P_value_EV_NPMLE(information, EV_NPMLE_1D_parameter)
+p_value_EVD = P_value_EVD_NPMLE(information, EVD_NPMLE_1D_parameter)
 ```
 
 ```{r}
-hist(p_value_EV)
+hist(p_value_EVD)
 ```
 
 ```{r}
-length(my_BH(p_value_EV, alpha))
+length(my_BH(p_value_EVD, alpha))
 ```
 
 ```{r}
@@ -528,6 +529,20 @@ df_1D_F_PBMC1 = data.frame(x = hat_F$grid, prob = hat_F$mass)
 
 ```{r}
 write.csv(df_1D_F_PBMC1, '1D_F_PBMC_voom.csv')
+```
+
+### EV-NPMLE
+
+```{r}
+p_value_EV = P_value_EV_NPMLE(information, EV_NPMLE_1D_parameter)
+```
+
+```{r}
+hist(p_value_EV)
+```
+
+```{r}
+length(my_BH(p_value_EV, alpha))
 ```
 
 ## Visualization
@@ -718,18 +733,18 @@ hist(p_value_t_vbg)
 length(my_BH(p_value_t_vbg, alpha))
 ```
 
-### EV-NPMLE
+### EVD-NPMLE
 
 ```{r}
-p_value_EV_vbg = P_value_EV_NPMLE(information_vbg, EV_NPMLE_1D_parameter)
+p_value_EVD_vbg = P_value_EVD_NPMLE(information_vbg, EVD_NPMLE_1D_parameter)
 ```
 
 ```{r}
-hist(p_value_EV_vbg)
+hist(p_value_EVD_vbg)
 ```
 
 ```{r}
-length(my_BH(p_value_EV_vbg, alpha))
+length(my_BH(p_value_EVD_vbg, alpha))
 ```
 
 ```{r}
@@ -742,6 +757,20 @@ df_1D_F_PBMC1_vbg = data.frame(x = hat_F_vbg$grid, prob = hat_F_vbg$mass)
 
 ```{r}
 write.csv(df_1D_F_PBMC1_vbg, '1D_F_PBMC1_vbg_ModHC.csv')
+```
+
+### EV-NPMLE
+
+```{r}
+p_value_EV_vbg = P_value_EV_NPMLE(information_vbg, EV_NPMLE_1D_parameter)
+```
+
+```{r}
+hist(p_value_EV_vbg)
+```
+
+```{r}
+length(my_BH(p_value_EV_vbg, alpha))
 ```
 
 ### Visualizaition

@@ -263,13 +263,13 @@ P_value_pooled_t_test = function (m, X1, X2) {
   return (P_value_list_pooled_t_test)
 }
 
-# P value calculation for Equal-variance NPMLE
+# P value calculation for Equal-variance-dist NPMLE
 
 p_s_j_given_sigma2_EV = function(n, s_j, var) {
   out = ((n-1)/var) * 1 / (2^((n-1)/2) * gamma((n-1)/2)) * ((n-1) * s_j/var)^((n-3)/2) * exp((-1/2) * (n-1) * s_j/var)
 }
 
-EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+EVD_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
   
   S_list = c(S1_list, S2_list)
   
@@ -291,16 +291,81 @@ EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_qua
   output = list('grid' = var_df, 'mass' = pair_mass)
 }
 
+P_value_EVD_NPMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, EVD_NPMLE_1D_parameter) {
+  EVD_NPMLE_result = EVD_NPMLE_1D(S1_list, S2_list, B = EVD_NPMLE_1D_parameter[1], m, n1, n2, lower_quantile = EVD_NPMLE_1D_parameter[2], upper_quantile = EVD_NPMLE_1D_parameter[3])
+  
+  P_value_list_EVD_npmle = rep(0, m)
+  for (i in c(1:m)) {
+    P_value_list_EVD_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EVD_NPMLE_result$grid, EVD_NPMLE_result$mass, S1_list[i], S2_list[i])
+  }
+  
+  return(P_value_list_EVD_npmle)
+}
+
+# P value calculation for Equal-variance NPMLE
+
+EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+  
+  S_list = c(S1_list, S2_list)
+  
+  lower = quantile(S_list, lower_quantile)
+  upper = quantile(S_list, upper_quantile)
+  log_u = seq(log(lower), log(upper), length = B)
+  u = exp(log_u)
+  d = rep(1,B)
+  w = rep(1, m * 2) / (m * 2) 
+  A1 = outer(S1_list, u, FUN = p_s_j_given_sigma2_EV, n = n1)
+  A2 = outer(S2_list, u, FUN = p_s_j_given_sigma2_EV, n = n2)
+  A = rbind(A1, A2)
+  result = KWPrimal(A, d, w)
+  mass = result$f/sum(result$f)
+  
+  output = list('grid' = u, 'mass' = mass)
+}
+
+p_given_sigma2 = function(n1, n2, Z1, Z2, var) {
+  
+  upper = (Z1 - Z2)
+  lower = sqrt(var * (1/n1 + 1/n2))
+  
+  test_stat = upper/lower
+  
+  p = pnorm(abs(test_stat), lower.tail = FALSE) * 2
+  
+  out = p
+}
+
+p_s1_s2_given_sigma2 = function(n1, n2, s1_j, s2_j, var) {
+  p_s1_given_sigma2 = p_s_j_given_sigma2_EV(n1, s1_j, var)
+  p_s2_given_sigma2 = p_s_j_given_sigma2_EV(n2, s2_j, var)
+  return (p_s1_given_sigma2 * p_s2_given_sigma2)
+}
+
+mass_given_s1_s2 = function(grid, mass, s1_j, s2_j, n1, n2) {
+  p_s1_s2_given_grid = p_s1_s2_given_sigma2(n1, n2, s1_j, s2_j, grid)
+  p_s1_s2_grid = p_s1_s2_given_grid * mass
+  post_mass = p_s1_s2_grid / sum(p_s1_s2_grid)
+  return(post_mass)
+}
+
+p_value_EV_npmle_j = function(n1, n2, Z1, Z2, grid, mass, s1_j, s2_j) {
+  P_value_joint_list_j = p_given_sigma2(n1, n2, Z1, Z2, grid)
+  post_mass_j = mass_given_s1_s2(grid, mass, s1_j, s2_j, n1, n2)
+  P_value_j = sum(P_value_joint_list_j * post_mass_j)
+  return (P_value_j)
+}
+
 P_value_EV_NPMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, EV_NPMLE_1D_parameter) {
   EV_NPMLE_result = EV_NPMLE_1D(S1_list, S2_list, B = EV_NPMLE_1D_parameter[1], m, n1, n2, lower_quantile = EV_NPMLE_1D_parameter[2], upper_quantile = EV_NPMLE_1D_parameter[3])
   
   P_value_list_EV_npmle = rep(0, m)
   for (i in c(1:m)) {
-    P_value_list_EV_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EV_NPMLE_result$grid, EV_NPMLE_result$mass, S1_list[i], S2_list[i])
+    P_value_list_EV_npmle[i] = p_value_EV_npmle_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EV_NPMLE_result$grid, EV_NPMLE_result$mass, S1_list[i], S2_list[i])
   }
   
   return(P_value_list_EV_npmle)
 }
+
 
 # BH, Power, FDR
 
@@ -444,7 +509,7 @@ file_name = function(rounds, algorithm_list) {
   return (paste('(', file, ')', sep = ''))
 }
 
-simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5,6,7,8), equ_var = FALSE) {
+simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, alpha, rounds, algorithm_list = c(1,2,3,4,5,6,7,8,9), equ_var = FALSE) {
   
   if (!dir.exists('Simulation_result')) {
     print('Create Data Directory')
@@ -458,7 +523,7 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
   n1 = as.integer(args[1])
   n2 = as.integer(args[2])
   
-  dir = dir_name(equ_var, n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter,alpha)
+  dir = dir_name(equ_var, n1, n2, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, alpha)
   file = file_name(rounds, algorithm_list)
   
   if (!dir.exists(dir)) {
@@ -466,10 +531,10 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     dir.create(dir)
   }
   
-  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch', 'B_F', 'Pooled_t', 'EV_NPMLE')
+  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch', 'B_F', 'Pooled_t', 'EV_NPMLE', 'EV2_NPMLE')
   
-  FDP_of_algorithms = matrix(0, 8, rounds)
-  Power_of_algorithms = matrix(0, 8, rounds)
+  FDP_of_algorithms = matrix(0, 9, rounds)
+  Power_of_algorithms = matrix(0, 9, rounds)
   
   print('Simulation Start')
   print(paste('Parameters:', file.path(dir, file)))
@@ -602,7 +667,7 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
 
       if (code == 8) {
         print(paste('start of', algorithm_name[code]))
-        P_list = P_value_EV_NPMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, EV_NPMLE_1D_parameter)
+        P_list = P_value_EVD_NPMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, EVD_NPMLE_1D_parameter)
         discovery = my_BH(P_list, alpha)
         power = Power(discovery, flag_list)
         fdp = FDP(discovery, flag_list)
@@ -613,6 +678,24 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
           break
         }
 
+        Power_of_algorithms[code, r] = power
+        FDP_of_algorithms[code, r] = fdp
+        print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
+      }
+
+      if (code == 9) {
+        print(paste('start of', algorithm_name[code]))
+        P_list = P_value_EV_NPMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, EV_NPMLE_1D_parameter)
+        discovery = my_BH(P_list, alpha)
+        power = Power(discovery, flag_list)
+        fdp = FDP(discovery, flag_list)
+        
+        if (power == 0) {
+          print(paste('Error detected and rerun round', r))
+          Rerun = TRUE
+          break
+        }
+        
         Power_of_algorithms[code, r] = power
         FDP_of_algorithms[code, r] = fdp
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
@@ -628,9 +711,9 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     
     print('Updating Round Data')
     
-    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r], 'B_F' = Power_of_algorithms[6, 1:r], 'Pooled_t' = Power_of_algorithms[7, 1:r], 'EV_NPMLE' = Power_of_algorithms[8, 1:r])
+    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r], 'B_F' = Power_of_algorithms[6, 1:r], 'Pooled_t' = Power_of_algorithms[7, 1:r], 'EV_NPMLE' = Power_of_algorithms[8, 1:r], 'EV2_NPMLE' = Power_of_algorithms[9, 1:r])
     write.csv(power_df_r, file = paste(file.path(dir, file), '_power.csv', sep = ''))
-    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r], 'Pooled_t' = FDP_of_algorithms[7, 1:r], 'EV_NPMLE' = FDP_of_algorithms[8, 1:r])
+    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r], 'Pooled_t' = FDP_of_algorithms[7, 1:r], 'EV_NPMLE' = FDP_of_algorithms[8, 1:r], 'EV2_NPMLE' = FDP_of_algorithms[9, 1:r])
     write.csv(fdp_df_r, file = paste(file.path(dir, file), '_fdp.csv', sep = ''))
     
     r = r + 1
@@ -652,12 +735,13 @@ alpha = 0.1
 rounds = 50
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
-EV_NPMLE_1D_parameter = c(80, 0.01, 1.0)
-algorithm_list = c(8)
+EVD_NPMLE_1D_parameter = c(80, 0.01, 1.0)
+EV_NPMLE_1D_parameter = c(1000, 0.01, 1.0)
+algorithm_list = c(9)
 equ_var = TRUE
 seed = Sys.time()
 data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
 
-result = simulator(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EV_NPMLE_1D_parameter, alpha, rounds, algorithm_list, equ_var)
+result = simulator(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, alpha, rounds, algorithm_list, equ_var)
 
 print(result)

@@ -277,13 +277,13 @@ P_value_pooled_t_test = function (info) {
   return (P_value_list_pooled_t_test)
 }
 
-# P value calculation for EV-NPMLE
+# P value calculation for EVD-NPMLE
 
 p_s_j_given_sigma2_EV = function(n, s_j, var) {
   out = ((n-1)/var) * 1 / (2^((n-1)/2) * gamma((n-1)/2)) * ((n-1) * s_j/var)^((n-3)/2) * exp((-1/2) * (n-1) * s_j/var)
 }
 
-EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+EVD_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
   
   S_list = c(S1_list, S2_list)
   
@@ -305,6 +305,82 @@ EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_qua
   output = list('grid' = var_df, 'mass' = pair_mass)
 }
 
+P_value_EVD_NPMLE = function(info, EVD_NPMLE_1D_parameter) {
+  
+  n1 = info$n1
+  n2 = info$n2
+  m = info$m
+  Z1_list = info$Z1_list 
+  Z2_list = info$Z2_list
+  S1_list = info$S1_list
+  S2_list = info$S2_list
+  W1_matrix = info$W1_matrix
+  W2_matrix = info$W2_matrix
+  
+  EVD_NPMLE_result = EVD_NPMLE_1D(S1_list, S2_list, B = EVD_NPMLE_1D_parameter[1], m, n1, n2, lower_quantile = EVD_NPMLE_1D_parameter[2], upper_quantile = EVD_NPMLE_1D_parameter[3])
+  
+  P_value_list_EVD_npmle = rep(0, m)
+  for (i in c(1:m)) {
+    P_value_list_EVD_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EVD_NPMLE_result$grid, EVD_NPMLE_result$mass, S1_list[i], S2_list[i], W1_matrix[i, ], W2_matrix[i, ])
+  }
+  return(P_value_list_EVD_npmle)
+}
+
+# P value calculation for EV-NPMLE
+
+EV_NPMLE_1D = function(S1_list, S2_list, B, m, n1, n2, lower_quantile, upper_quantile) {
+  
+  S_list = c(S1_list, S2_list)
+  
+  lower = quantile(S_list, lower_quantile)
+  upper = quantile(S_list, upper_quantile)
+  log_u = seq(log(lower), log(upper), length = B)
+  u = exp(log_u)
+  d = rep(1,B)
+  w = rep(1, m * 2) / (m * 2) 
+  A1 = outer(S1_list, u, FUN = p_s_j_given_sigma2_EV, n = n1)
+  A2 = outer(S2_list, u, FUN = p_s_j_given_sigma2_EV, n = n2)
+  A = rbind(A1, A2)
+  result = KWPrimal(A, d, w)
+  mass = result$f/sum(result$f)
+  
+  output = list('grid' = u, 'mass' = mass)
+}
+
+p_given_sigma2 = function(n1, n2, Z1, Z2, var, W1, W2) {
+  
+  nA = sum(W1)
+  nB = sum(W2)
+  upper = (Z1 - Z2)
+  lower = sqrt(var * (1/nA + 1/nB))
+  
+  test_stat = upper/lower
+  
+  p = pnorm(abs(test_stat), lower.tail = FALSE) * 2
+  
+  out = p
+}
+
+p_s1_s2_given_sigma2 = function(n1, n2, s1_j, s2_j, var) {
+  p_s1_given_sigma2 = p_s_j_given_sigma2_EV(n1, s1_j, var)
+  p_s2_given_sigma2 = p_s_j_given_sigma2_EV(n2, s2_j, var)
+  return (p_s1_given_sigma2 * p_s2_given_sigma2)
+}
+
+mass_given_s1_s2 = function(grid, mass, s1_j, s2_j, n1, n2) {
+  p_s1_s2_given_grid = p_s1_s2_given_sigma2(n1, n2, s1_j, s2_j, grid)
+  p_s1_s2_grid = p_s1_s2_given_grid * mass
+  post_mass = p_s1_s2_grid / sum(p_s1_s2_grid)
+  return(post_mass)
+}
+
+p_value_EV_npmle_j = function(n1, n2, Z1, Z2, grid, mass, s1_j, s2_j, W1, W2) {
+  P_value_joint_list_j = p_given_sigma2(n1, n2, Z1, Z2, grid, W1, W2)
+  post_mass_j = mass_given_s1_s2(grid, mass, s1_j, s2_j, n1, n2)
+  P_value_j = sum(P_value_joint_list_j * post_mass_j)
+  return (P_value_j)
+}
+
 P_value_EV_NPMLE = function(info, EV_NPMLE_1D_parameter) {
   
   n1 = info$n1
@@ -321,8 +397,9 @@ P_value_EV_NPMLE = function(info, EV_NPMLE_1D_parameter) {
   
   P_value_list_EV_npmle = rep(0, m)
   for (i in c(1:m)) {
-    P_value_list_EV_npmle[i] = p_value_npmle_2D_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EV_NPMLE_result$grid, EV_NPMLE_result$mass, S1_list[i], S2_list[i], W1_matrix[i, ], W2_matrix[i, ])
+    P_value_list_EV_npmle[i] = p_value_EV_npmle_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], EV_NPMLE_result$grid, EV_NPMLE_result$mass, S1_list[i], S2_list[i], W1_matrix[i, ], W2_matrix[i, ])
   }
+  
   return(P_value_list_EV_npmle)
 }
 
