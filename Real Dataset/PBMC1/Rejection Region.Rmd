@@ -1,0 +1,640 @@
+---
+title: "Rejection Region"
+output: pdf_document
+date: "2024-11-09"
+---
+
+```{r}
+library(limma)
+library(edgeR)
+source('voomByGroup.R')
+library(ggplot2)
+library(tidyverse)
+```
+
+# load PBMC1 data
+
+```{r}
+counts = readRDS("./PBMC1/counts.rds")
+group = readRDS("./PBMC1/group_id.rds")
+```
+
+```{r}
+source('voom_EPB.R')
+source('helper.R')
+```
+
+```{r}
+group
+```
+
+# Data Filtering
+
+```{r}
+high_expression_counts = counts[rowSums(counts)>50,]
+```
+
+```{r}
+filter = (group == 'Moderate' | group == 'HC')
+```
+
+```{r}
+filtered_counts = high_expression_counts[, filter]
+filtered_group = group[filter]
+```
+
+# Create DGElist
+
+```{r}
+y = DGEList(filtered_counts)
+```
+
+```{r}
+y$samples$group
+y$samples$group = filtered_group
+y$samples$group
+```
+
+# Calculate Normalizing Factors
+
+```{r}
+y = calcNormFactors(y)
+```
+
+```{r}
+y$samples
+```
+# Create the design matrix based on group information.
+
+```{r}
+group_assignment = y$samples$group
+design = model.matrix(~0 + group_assignment)
+design
+```
+
+## Normalize library size R
+
+```{r}
+R = y$samples$lib.size * y$samples$norm.factors
+```
+
+## Calculate log-cpm
+
+```{r}
+Y = t(log2((t(filtered_counts) + 0.5)/(R+1) * 1e6))
+```
+
+## Normalize log-cpm
+
+```{r}
+Y = normalizeBetweenArrays(Y, method='none')
+```
+
+## voom
+
+```{r}
+v = voom(y, design = design, plot = TRUE)
+```
+
+## voomByGroup
+
+```{r}
+vbg = voomByGroup(y, design = design, group = group_assignment, plot = 'combine')
+```
+
+# Rejection region voom
+
+```{r}
+Y1 = Y[, c(1,2,3,4,8)]
+Y2 = Y[, c(5,6,7)]
+
+w = v$weights
+w1 = w[, c(1,2,3,4,8)]
+w2 = w[, c(5,6,7)]
+```
+
+Samples for test
+
+```{r}
+Y1_1 = Y1[1, ]
+Y2_1 = Y2[1, ]
+K1 = length(Y1_1)
+K2 = length(Y2_1)
+n1 = sum(w1[1,])
+n2 = sum(w2[1,])
+m1 = mean(Y1_1)
+m2 = mean(Y2_1)
+sd1 = sqrt(var(Y1_1))
+sd2 = sqrt(var(Y2_1))
+se = sqrt(sd1^2/n1 + sd2^2/n2)
+md = m1 - m2
+t = md / se
+t
+```
+
+```{r}
+info = information_extractor(Y1, Y2, w1, w2)
+```
+
+
+```{r}
+tau_list = info$S1_list/info$S2_list
+
+log_tau_list = log(tau_list)
+
+range = quantile(log_tau_list, c(0.025, 1-0.025))
+
+range_filter = log(tau_list) >= range[1] & log(tau_list) <= range[2]
+
+log_tau_list = log_tau_list[range_filter]
+
+hist(log_tau_list, breaks = 40)
+
+tau_grid = exp(seq(min(log_tau_list), max(log_tau_list), length.out = 1000))
+```
+
+Range of sample t_BF to determine range of root solver
+
+```{r}
+t_BF_list = c()
+D = c()
+for (i in 1:nrow(Y1)) {
+  m1_i = mean(Y1[i, ])
+  m2_i = mean(Y2[i, ])
+  s1_i = var(Y1[i, ])
+  s2_i = var(Y2[i, ])
+  w1_i = w1[i, ]
+  w2_i = w2[i, ]
+  n1 = sum(w1_i)
+  n2 = sum(w2_i)
+  t_BF_i = (m1_i - m2_i) / sqrt(s1_i/n1 + s2_i/n2)
+  t_BF_list = c(t_BF_list, t_BF_i)
+  Di = s1_i/n1 + s2_i/n2
+  D = c(D, Di)
+}
+t_BF_list[1]
+
+max(t_BF_list)
+D = D[range_filter]
+
+t_BF_list = t_BF_list[range_filter]
+```
+
+```{r}
+result_csv = read.csv('./Mod vs HC/2D_weighted_voom_ModHC.csv')
+```
+
+```{r}
+grid = result_csv[, 2:3]
+mass = result_csv[, 4]
+```
+
+```{r}
+#target = sort(abs(log_tau_list), decreasing = TRUE)[1:50]
+
+#sort(D[abs(log_tau_list) %in% target] / median(D))
+
+#cbind(info$S1_list[log(tau_list) >= -5][abs(log_tau_list) %in% target], info$S2_list[log(tau_list) >= -5][abs(log_tau_list) %in% target], D[abs(log_tau_list) %in% target] / median(D))
+```
+
+
+```{r}
+cutoff_1DNPMLE = 0.0026508907
+cutoff_2DNPMLE = 0.0030585356
+cutoff_Welch = 0.0002270525
+cutoff_pooled_t = 0.0038435845
+cutoff_B_F = -Inf
+cutoff_EV_NPMLE = 0.0035106845
+```
+
+```{r}
+grid_1D = grid_2D[, 1] / grid_2D[, 2]
+```
+
+# Beherens-Fisher test
+
+```{r}
+t_BF_005 = c()
+
+for (tau in tau_grid) {
+  t_BF_005_i = BF_pvalue_BF_solver_positive(tau, K1, K2, w1[1, ], w2[1, ], 0.05)
+  t_BF_005 = append(t_BF_005, t_BF_005_i)
+}
+```
+
+```{r}
+t_BF_bh = c()
+
+for (tau in tau_grid) {
+  t_BF_bh_i = BF_pvalue_BF_solver_positive(tau, K1, K2, 0.1)
+  t_BF_bh = append(t_BF_bh, t_BF_bh_i)
+}
+```
+
+# 1DNPMLE
+
+```{r}
+p_value_npmle_j(K1, K2, m1, m2, sd1^2, sd2^2, w1[1,], w2[1,],grid_1D, mass, sd1^2/sd2^2)
+BF_pvalue_1DNPMLE(t, K1, K2, w1[1, ], w2[1, ], grid_1D, mass, sd1^2/sd2^2)
+BF_pvalue_1DNPMLE_solver_positive(K1, K2, w1[1, ], w2[1, ], grid_1D, mass, sd1^2/sd2^2, 0.05)
+```
+
+```{r}
+t_1DNPMLE_005 = c()
+#t_1DNPMLE_bh = c()
+
+for (tau in tau_grid) {
+  t_1DNPMLE_005_i = BF_pvalue_1DNPMLE_solver_positive(K1, K2, w1[1, ], w2[1, ], grid_1D, mass, tau, 0.05)
+  #t_1DNPMLE_bh_i = BF_pvalue_1DNPMLE_solver_positive(K1, K2, grid_1D, mass, tau, cutoff_1DNPMLE)
+  t_1DNPMLE_005 = append(t_1DNPMLE_005, t_1DNPMLE_005_i)
+  #t_1DNPMLE_bh = append(t_1DNPMLE_bh, t_1DNPMLE_bh_i)
+}
+```
+
+# Welch
+
+```{r}
+Welch_approximation_p(K1, K2, m1, m2, sd1^2, sd2^2, w1[1, ], w2[1, ])
+BF_pvalue_Welch(t, sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ])
+BF_pvalue_Welch_solver_positive(sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ], 0.05)
+t
+```
+
+```{r}
+t_Welch_005 = c()
+#t_Welch_bh = c()
+
+for (tau in tau_grid) {
+  t_Welch_005_i = BF_pvalue_Welch_solver_positive(tau, K1, K2, w1[1, ], w2[1, ], 0.05)
+  #t_Welch_bh_i = BF_pvalue_Welch_solver_positive(tau, K1, K2, cutoff_Welch)
+  t_Welch_005 = append(t_Welch_005, t_Welch_005_i)
+  #t_Welch_bh = append(t_Welch_bh, t_Welch_bh_i)
+}
+```
+
+# Pooled t-test
+
+```{r}
+pooled_t_test_p(K1, K2, m1, m2, sd1^2, sd2^2, w1[1, ], w2[1, ])
+BF_pvalue_t(t, sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ])
+BF_pvalue_t_solver_positive(sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ], 0.05)
+t
+```
+
+```{r}
+t_t_005 = c()
+#t_t_bh = c()
+
+for (tau in tau_grid) {
+  t_t_005_i = BF_pvalue_t_solver_positive(tau, K1, K2, w1[1, ], w2[1, ], 0.05)
+  #t_t_bh_i = BF_pvalue_t_solver_positive(tau, K1, K2, cutoff_pooled_t)
+  t_t_005 = append(t_t_005, t_t_005_i)
+  #t_t_bh = append(t_t_bh, t_t_bh_i)
+}
+```
+
+# Visualization
+
+```{r}
+plot_2D = function(u1,u2) {
+  ggplot(data.frame(u1 = u1, u2 = u2), aes(x = u1, y = u2)) +
+    stat_bin2d(bins = 200) +
+    scale_fill_gradient(low = "lightblue", high = "darkblue") +
+    labs(x = "u1", y = "u2", fill = "Count") +
+    scale_y_continuous(limits = c(-20, 20)) +
+    theme_minimal()
+}
+```
+
+```{r}
+plot_2D(log_tau_list, t_BF_list) + 
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_BF_bh), aes(x = log_tau_grid, y = y, color = 'BF (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_BF_bh), aes(x = log_tau_grid, y = y, color = 'BF (BH)')) +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_1DNPMLE_bh), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_1DNPMLE_bh), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (BH)')) +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_Welch_bh), aes(x = log_tau_grid, y = y, color = 'Welch (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_Welch_bh), aes(x = log_tau_grid, y = y, color = 'Welch (BH)')) +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_t_bh), aes(x = log_tau_grid, y = y, color = 'Pooled t (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_t_bh), aes(x = log_tau_grid, y = y, color = 'Pooled t (BH)')) +
+  
+  scale_color_manual(name = '', values = c('1D-NPMLE (BH)' = 'blue', 'BF (BH)' = 'pink', 'Welch (BH)' = 'green', 'Pooled t (BH)' = 'red', '1D-NPMLE (unadj.)' = 'blue', 'BF (unadj.)' = 'pink', 'Welch (unadj.)' = 'green', 'Pooled t (unadj.)' = 'red')) + 
+  labs(x = expression(hat(lambda[i])), y = expression(T[i]^{BF})) + theme_minimal()
+```
+
+```{r}
+plot_2D(log_tau_list, t_BF_list) + 
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  
+  scale_color_manual(name = '', values = c('1D-NPMLE (unadj.)' = 'blue', 'BF (unadj.)' = 'pink', 'Welch (unadj.)' = 'green', 'Pooled t (unadj.)' = 'red')) + 
+  labs(x = expression(hat(lambda[i])), y = expression(T[i]^{BF})) + theme_minimal()
+```
+
+```{r}
+par(mar = c(5, 4, 4, 8))
+
+plot(log(tau_grid), t_BF_005, type = 'l', ylim = c(-20, 20), lwd = 2, col = 'pink', xlab = expression(hat(lambda[i])), ylab = expression(T[i]^{BF}), lty=2)
+lines(log(tau_grid), -t_BF_005, lwd = 2, col = 'pink', lty=2)
+#lines(log(tau_grid), t_BF_bh, lwd = 2, col = 'pink')
+#lines(log(tau_grid), -t_BF_bh, lwd = 2, col = 'pink')
+
+lines(log(tau_grid), t_1DNPMLE_005, lwd = 2, col = 'blue', lty=2)
+lines(log(tau_grid), -t_1DNPMLE_005, lwd = 2, col = 'blue', lty=2)
+#lines(log(tau_grid), t_1DNPMLE_bh, lwd = 2, col = 'blue')
+#lines(log(tau_grid), -t_1DNPMLE_bh, lwd = 2, col = 'blue')
+
+lines(log(tau_grid), t_Welch_005, lwd = 2, col = 'green', lty=2)
+lines(log(tau_grid), -t_Welch_005, lwd = 2, col = 'green', lty=2)
+#lines(log(tau_grid), t_Welch_bh, lwd = 2, col = 'green')
+#lines(log(tau_grid), -t_Welch_bh, lwd = 2, col = 'green')
+
+lines(log(tau_grid), t_t_005, lwd = 2, col = 'red', lty=2)
+lines(log(tau_grid), -t_t_005, lwd = 2, col = 'red', lty=2)
+#lines(log(tau_grid), t_t_bh, lwd = 2, col = 'red')
+#lines(log(tau_grid), -t_t_bh, lwd = 2, col = 'red')
+
+#legend('topright', c('1D_NPMLE (BH)', 'Welch (BH)', 'B_F (BH)', 'Pooled_t (BH)', '1D_NPMLE (unadj.)', 'Welch (unadj.)', 'B_F (unadj.)', 'Pooled_t (unadj.)'), col=c('blue', 'green', 'pink', 'red', 'blue', 'green', 'pink', 'red'), lwd=2, lty = c(1,1,1,1,2,2,2,2), cex = 0.7, inset = c(-0.32, 0), xpd = TRUE)
+legend('topright', c('1D_NPMLE (unadj.)', 'Welch (unadj.)', 'B_F (unadj.)', 'Pooled_t (unadj.)'), col=c('blue', 'green', 'pink', 'red'), lwd=2, lty = c(2,2,2,2), cex = 0.7, inset = c(-0.32, 0), xpd = TRUE)
+```
+
+# Rejection region voombyGroup
+
+```{r}
+Y1 = Y[, c(1,2,3,4,8)]
+Y2 = Y[, c(5,6,7)]
+
+w = vbg$weights
+w1 = w[, c(1,2,3,4,8)]
+w2 = w[, c(5,6,7)]
+```
+
+Samples for test
+
+```{r}
+Y1_1 = Y1[1, ]
+Y2_1 = Y2[1, ]
+K1 = length(Y1_1)
+K2 = length(Y2_1)
+n1 = sum(w1[1,])
+n2 = sum(w2[1,])
+m1 = mean(Y1_1)
+m2 = mean(Y2_1)
+sd1 = sqrt(var(Y1_1))
+sd2 = sqrt(var(Y2_1))
+se = sqrt(sd1^2/n1 + sd2^2/n2)
+md = m1 - m2
+t = md / se
+t
+```
+
+```{r}
+info = information_extractor(Y1, Y2, w1, w2)
+```
+
+
+```{r}
+tau_list = info$S1_list/info$S2_list
+
+log_tau_list = log(tau_list)
+
+range = quantile(log_tau_list, c(0.025, 1-0.025))
+
+range_filter = log(tau_list) >= range[1] & log(tau_list) <= range[2]
+
+log_tau_list = log_tau_list[range_filter]
+
+hist(log_tau_list, breaks = 40)
+
+tau_grid = exp(seq(min(log_tau_list), max(log_tau_list), length.out = 1000))
+```
+
+Range of sample t_BF to determine range of root solver
+
+```{r}
+t_BF_list = c()
+D = c()
+for (i in 1:nrow(Y1)) {
+  m1_i = mean(Y1[i, ])
+  m2_i = mean(Y2[i, ])
+  s1_i = var(Y1[i, ])
+  s2_i = var(Y2[i, ])
+  w1_i = w1[i, ]
+  w2_i = w2[i, ]
+  n1 = sum(w1_i)
+  n2 = sum(w2_i)
+  t_BF_i = (m1_i - m2_i) / sqrt(s1_i/n1 + s2_i/n2)
+  t_BF_list = c(t_BF_list, t_BF_i)
+  Di = s1_i/n1 + s2_i/n2
+  D = c(D, Di)
+}
+t_BF_list[1]
+
+max(t_BF_list)
+D = D[range_filter]
+
+t_BF_list = t_BF_list[range_filter]
+```
+
+```{r}
+result_csv = read.csv('./Mod vs HC/2D_weighted_vbg_ModHC.csv')
+```
+
+```{r}
+grid = result_csv[, 2:3]
+mass = result_csv[, 4]
+```
+
+```{r}
+#target = sort(abs(log_tau_list), decreasing = TRUE)[1:50]
+
+#sort(D[abs(log_tau_list) %in% target] / median(D))
+
+#cbind(info$S1_list[log(tau_list) >= -5][abs(log_tau_list) %in% target], info$S2_list[log(tau_list) >= -5][abs(log_tau_list) %in% target], D[abs(log_tau_list) %in% target] / median(D))
+```
+
+
+```{r}
+cutoff_1DNPMLE = 0.0026508907
+cutoff_2DNPMLE = 0.0030585356
+cutoff_Welch = 0.0002270525
+cutoff_pooled_t = 0.0038435845
+cutoff_B_F = -Inf
+cutoff_EV_NPMLE = 0.0035106845
+```
+
+```{r}
+grid_1D = grid_2D[, 1] / grid_2D[, 2]
+```
+
+# Beherens-Fisher test
+
+```{r}
+t_BF_005 = c()
+
+for (tau in tau_grid) {
+  t_BF_005_i = BF_pvalue_BF_solver_positive(tau, K1, K2, w1[1, ], w2[1, ], 0.05)
+  t_BF_005 = append(t_BF_005, t_BF_005_i)
+}
+```
+
+```{r}
+t_BF_bh = c()
+
+for (tau in tau_grid) {
+  t_BF_bh_i = BF_pvalue_BF_solver_positive(tau, K1, K2, 0.1)
+  t_BF_bh = append(t_BF_bh, t_BF_bh_i)
+}
+```
+
+# 1DNPMLE
+
+```{r}
+p_value_npmle_j(K1, K2, m1, m2, sd1^2, sd2^2, w1[1,], w2[1,],grid_1D, mass, sd1^2/sd2^2)
+BF_pvalue_1DNPMLE(t, K1, K2, w1[1, ], w2[1, ], grid_1D, mass, sd1^2/sd2^2)
+BF_pvalue_1DNPMLE_solver_positive(K1, K2, w1[1, ], w2[1, ], grid_1D, mass, sd1^2/sd2^2, 0.05)
+```
+
+```{r}
+t_1DNPMLE_005 = c()
+#t_1DNPMLE_bh = c()
+
+for (tau in tau_grid) {
+  t_1DNPMLE_005_i = BF_pvalue_1DNPMLE_solver_positive(K1, K2, w1[1, ], w2[1, ], grid_1D, mass, tau, 0.05)
+  #t_1DNPMLE_bh_i = BF_pvalue_1DNPMLE_solver_positive(K1, K2, grid_1D, mass, tau, cutoff_1DNPMLE)
+  t_1DNPMLE_005 = append(t_1DNPMLE_005, t_1DNPMLE_005_i)
+  #t_1DNPMLE_bh = append(t_1DNPMLE_bh, t_1DNPMLE_bh_i)
+}
+```
+
+# Welch
+
+```{r}
+Welch_approximation_p(K1, K2, m1, m2, sd1^2, sd2^2, w1[1, ], w2[1, ])
+BF_pvalue_Welch(t, sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ])
+BF_pvalue_Welch_solver_positive(sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ], 0.05)
+t
+```
+
+```{r}
+t_Welch_005 = c()
+#t_Welch_bh = c()
+
+for (tau in tau_grid) {
+  t_Welch_005_i = BF_pvalue_Welch_solver_positive(tau, K1, K2, w1[1, ], w2[1, ], 0.05)
+  #t_Welch_bh_i = BF_pvalue_Welch_solver_positive(tau, K1, K2, cutoff_Welch)
+  t_Welch_005 = append(t_Welch_005, t_Welch_005_i)
+  #t_Welch_bh = append(t_Welch_bh, t_Welch_bh_i)
+}
+```
+
+# Pooled t-test
+
+```{r}
+pooled_t_test_p(K1, K2, m1, m2, sd1^2, sd2^2, w1[1, ], w2[1, ])
+BF_pvalue_t(t, sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ])
+BF_pvalue_t_solver_positive(sd1^2/sd2^2, K1, K2, w1[1, ], w2[1, ], 0.05)
+t
+```
+
+```{r}
+t_t_005 = c()
+#t_t_bh = c()
+
+for (tau in tau_grid) {
+  t_t_005_i = BF_pvalue_t_solver_positive(tau, K1, K2, w1[1, ], w2[1, ], 0.05)
+  #t_t_bh_i = BF_pvalue_t_solver_positive(tau, K1, K2, cutoff_pooled_t)
+  t_t_005 = append(t_t_005, t_t_005_i)
+  #t_t_bh = append(t_t_bh, t_t_bh_i)
+}
+```
+
+# Visualization
+
+```{r}
+plot_2D = function(u1,u2) {
+  ggplot(data.frame(u1 = u1, u2 = u2), aes(x = u1, y = u2)) +
+    stat_bin2d(bins = 200) +
+    scale_fill_gradient(low = "lightblue", high = "darkblue") +
+    labs(x = "u1", y = "u2", fill = "Count") +
+    scale_y_continuous(limits = c(-20, 20)) +
+    theme_minimal()
+}
+```
+
+```{r}
+plot_2D(log_tau_list, t_BF_list) + 
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_BF_bh), aes(x = log_tau_grid, y = y, color = 'BF (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_BF_bh), aes(x = log_tau_grid, y = y, color = 'BF (BH)')) +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_1DNPMLE_bh), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_1DNPMLE_bh), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (BH)')) +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_Welch_bh), aes(x = log_tau_grid, y = y, color = 'Welch (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_Welch_bh), aes(x = log_tau_grid, y = y, color = 'Welch (BH)')) +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_t_bh), aes(x = log_tau_grid, y = y, color = 'Pooled t (BH)')) +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_t_bh), aes(x = log_tau_grid, y = y, color = 'Pooled t (BH)')) +
+  
+  scale_color_manual(name = '', values = c('1D-NPMLE (BH)' = 'blue', 'BF (BH)' = 'pink', 'Welch (BH)' = 'green', 'Pooled t (BH)' = 'red', '1D-NPMLE (unadj.)' = 'blue', 'BF (unadj.)' = 'pink', 'Welch (unadj.)' = 'green', 'Pooled t (unadj.)' = 'red')) + 
+  labs(x = expression(hat(lambda[i])), y = expression(T[i]^{BF})) + theme_minimal()
+```
+
+```{r}
+plot_2D(log_tau_list, t_BF_list) + 
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_BF_005), aes(x = log_tau_grid, y = y, color = 'BF (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_1DNPMLE_005), aes(x = log_tau_grid, y = y, color = '1D-NPMLE (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_Welch_005), aes(x = log_tau_grid, y = y, color = 'Welch (unadj.)'), linetype = 'dashed') +
+  
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  geom_line(data = data.frame(log_tau_grid = log(tau_grid), y = -t_t_005), aes(x = log_tau_grid, y = y, color = 'Pooled t (unadj.)'), linetype = 'dashed') +
+  
+  scale_color_manual(name = '', values = c('1D-NPMLE (unadj.)' = 'blue', 'BF (unadj.)' = 'pink', 'Welch (unadj.)' = 'green', 'Pooled t (unadj.)' = 'red')) + 
+  labs(x = expression(hat(lambda[i])), y = expression(T[i]^{BF})) + theme_minimal()
+```
+
+

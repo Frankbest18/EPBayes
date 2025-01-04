@@ -203,6 +203,7 @@ for (n1 in n1_range) {
 }
 ```
 
+
 ```{r}
 n2_list = c()
 for (n1 in n1_range) {

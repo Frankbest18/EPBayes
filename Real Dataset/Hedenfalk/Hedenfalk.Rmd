@@ -61,11 +61,28 @@ result = solver(X1, X2, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_par
 ```{r}
 hist(result$`1D_NPMLE`, breaks = 50, main = '1D_NPMLE')
 hist(result$`2D_NPMLE`,breaks = 50, main = '2D_NPMLE')
-hist(result$Welch,breaks = 50, main = 'Welch')
+hist(result$`Welch`,breaks = 50, main = 'Welch')
 hist(result$`Pooled_t`,breaks = 50, main = 'Pooled_t')
 hist(result$`B_F`,breaks = 50, main = 'B_F')
 hist(result$`EVD_NPMLE`,breaks = 50, main = 'EVD_NPMLE')
 hist(result$`EV_NPMLE`,breaks = 50, main = 'EV_NPMLE')
+```
+
+```{r}
+source('helper.R')
+```
+
+```{r}
+cutoff_1DNPMLE = cutoff_pvalue(result$`1D_NPMLE`, 0.1)
+cutoff_2DNPMLE = cutoff_pvalue(result$`2D_NPMLE`, 0.1)
+cutoff_Welch = cutoff_pvalue(result$Welch, 0.1)
+cutoff_pooled_t = cutoff_pvalue(result$`Pooled_t`, 0.1)
+cutoff_B_F = cutoff_pvalue(result$`B_F`, 0.1)
+cutoff_EV_NPMLE = cutoff_pvalue(result$`EV_NPMLE`, 0.1)
+```
+
+```{r}
+c(cutoff_1DNPMLE, cutoff_2DNPMLE, cutoff_Welch, cutoff_pooled_t, cutoff_B_F, cutoff_EV_NPMLE) <- c(0.0026508907, 0.0030585356, 0.0002270525, 0.0038435845,-Inf, 0.0035106845)
 ```
 
 
@@ -77,6 +94,7 @@ length(my_BH(result$`Pooled_t`, 0.1))
 length(my_BH(result$`B_F`, 0.1))
 length(my_BH(result$`EVD_NPMLE`, 0.1))
 length(my_BH(result$`EV_NPMLE`, 0.1))
+
 ```
 
 # Visualization of \hat{G} and \hat{H} and \hat{F}

@@ -1,0 +1,535 @@
+---
+title: "Effect of G on alpha curve"
+output: pdf_document
+date: "2024-11-25"
+---
+
+# Study of the effect of underlying G(lambda) on the alpha curve
+
+```{r}
+source('helper.R')
+```
+
+```{r}
+K1 = 7
+K2 = 8
+```
+
+## Genral trend
+
+```{r}
+tau_grid = exp(seq(-6, 6, length.out = 100))
+```
+
+```{r}
+# Support of underlying G (point mass)
+lambda_list = exp(c(-4, -3,-2, -1, 0, 0.75, 1, 2, 3, 4))
+```
+
+```{r}
+curve_G_list = list()
+counter = 1
+
+for (lambda_i in lambda_list) {
+  G_i_grid_1D = c(lambda_i)
+  G_i_mass = c(1)
+  curve_G_i = c()
+  for (tau_j in tau_grid) {
+    t_i_j = BF_pvalue_1DNPMLE_solver_positive(K1, K2, G_i_grid_1D, G_i_mass, tau_j, 0.05)
+    curve_G_i = c(curve_G_i, t_i_j)
+  }
+  curve_G_list[[counter]] = curve_G_i
+  counter = counter + 1
+}
+```
+
+```{r}
+par(mar = c(5, 5, 4, 12))
+
+plot(x = log(tau_grid), y = curve_G_list[[1]], type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = expression(T[i]^{BF}), main = "curves with different underlying G with single point mass", ylim = c(1, 13))
+
+for (i in 2:length(curve_G_list)) {
+  lines(x = log(tau_grid), y = curve_G_list[[i]], col = i, lty = 1, lwd = 2)
+}
+
+legend("topright", legend = paste("log(lambda) = ", log(lambda_list)), col = 1:length(curve_G_list), lty = rep(1, length(curve_G_list)), inset = c(-0.52, 0), xpd = TRUE, lwd = 2)
+```
+
+## Fix lambda, |T^BF| is a function of hat(lambda)
+
+if lambda > l_edge(K1, K2): as hat(lambda) increases, |T^BF| decreases
+if lambda < l_edge(K1, K2): as hat(lambda) increases, |T^BF| increases
+
+```{r}
+l_edge = function(K1, K2) {
+  v1 = K1-1
+  v2 = K2-1
+  return (((v1-v2) * K1 * K2 + sqrt((v1-v2)^2 * K1^2 * K2^2 + 4 * K1^2 * K2^2 * v1 * v2)) / (2 * v2 * K2^2))
+}
+```
+
+```{r}
+tau_grid = exp(seq(-6, 6, length.out = 100))
+```
+
+```{r}
+# Support of underlying G (point mass)
+lambda_list = exp(seq(-6, 6, length.out = 100))
+```
+
+```{r}
+lambda_edge = l_edge(K1, K2)
+lambda_edge
+```
+
+```{r}
+increasing_flag_list = c()
+
+for (lambda_i in lambda_list) {
+  curve_i = c()
+  
+  for (tau_j in tau_grid) {
+      t_i_j = BF_pvalue_1DNPMLE_solver_positive(K1, K2, c(lambda_i), c(1), tau_j, 0.05)
+      curve_i = c(curve_i, t_i_j)
+  }
+
+  increasing_curve_i = sort(curve_i, decreasing = FALSE)
+
+  if (identical(increasing_curve_i, curve_i)) {
+    increasing_flag_list = c(increasing_flag_list, 1)
+  } else if (identical(rev(increasing_curve_i), curve_i)) {
+    increasing_flag_list = c(increasing_flag_list, -1)
+  } else {
+    increasing_flag_list = c(increasing_flag_list, 0)
+  }
+}
+```
+
+```{r}
+plot(x = log(lambda_list), y = increasing_flag_list, lwd = 2, col = 1, xlab = expression(log(hat(lambda[i]))), ylab = 'increasing flag', ylim = c(-1, 1))
+abline(v = log(lambda_edge), lty = 2)
+```
+
+## study l_edge(K1, K2)
+
+```{r}
+K1_list = c(3,4,5,6,7,8)
+K2_list = seq(3, 8, length.out = 100)
+```
+
+```{r}
+edge_list = list()
+counter = 1
+
+for (K1_i in K1_list) {
+  edge_K1_i = c()
+  for (K2_j in K2_list) {
+    l_i_j = l_edge(K1_i, K2_j)
+    edge_K1_i = c(edge_K1_i, l_i_j)
+  }
+  edge_list[[counter]] = edge_K1_i
+  counter = counter + 1
+}
+```
+
+```{r}
+par(mar = c(5, 5, 4, 12))
+
+plot(x = K2_list, y = edge_list[[1]], type = "l", lwd = 2, col = 1, lty = 1, xlab = 'K2', ylab = 'l edge', main = "relation between l edge curves and K2 with different K1", ylim = c(0, 10))
+
+for (i in 2:length(edge_list)) {
+  lines(x = K2_list, y = edge_list[[i]], col = i, lty = 1, lwd = 2)
+}
+
+legend("topright", legend = paste("K1 = ", K1_list), col = 1:length(edge_list), lty = rep(1, length(edge_list)), inset = c(-0.32, 0), xpd = TRUE, lwd = 2)
+```
+
+```{r}
+par(mar = c(5, 5, 4, 12))
+
+plot(x = K1_list[1] / K2_list, y = edge_list[[1]], type = "l", lwd = 2, col = 1, lty = 1, xlab = 'K1/K2', ylab = 'l edge', main = "relation between l edge curves and K1/K2 with different K1", ylim = c(0, 10), xlim = c(3/8, 8/3))
+
+for (i in 2:length(edge_list)) {
+  lines(x = K1_list[i]/K2_list, y = edge_list[[i]], col = i, lty = 1, lwd = 2)
+}
+
+legend("topright", legend = paste("K1 = ", K1_list), col = 1:length(edge_list), lty = rep(1, length(edge_list)), inset = c(-0.32, 0), xpd = TRUE, lwd = 2)
+```
+
+```{r}
+K2_list = c(3,4,5,6,7,8)
+r_list = exp(seq(log(1/10), log(10), length.out = 100))
+```
+
+```{r}
+edge_list = list()
+counter = 1
+
+for (K2_i in K2_list) {
+  edge_K2_i = c()
+  for (r_j in r_list) {
+    K1 = r_j * K2_i
+    if (K1 < 2) {
+      K1 = 2
+    }
+    l_i_j = l_edge(K1, K2_i)
+    edge_K2_i = c(edge_K2_i, l_i_j)
+  }
+  edge_list[[counter]] = edge_K2_i
+  counter = counter + 1
+}
+```
+
+```{r}
+par(mar = c(5, 5, 4, 12))
+
+plot(x = r_list, y = log(edge_list[[1]]), type = "l", lwd = 2, col = 1, lty = 1, xlab = 'K1/K2', ylab = 'log(l edge)', main = "relation between log(l_edge) curves and K1/K2 with different K2", ylim = c(-4, 5))
+
+for (i in 2:length(edge_list)) {
+  lines(x = r_list, y = log(edge_list[[i]]), col = i, lty = 1, lwd = 2)
+}
+
+legend("topright", legend = paste("K1 = ", K2_list), col = 1:length(edge_list), lty = rep(1, length(edge_list)), inset = c(-0.32, 0), xpd = TRUE, lwd = 2)
+```
+
+## G supported on two point masses l1, l2
+
+```{r}
+K1 = 7
+K2 = 8
+log_edge = log(l_edge(K1, K2))
+log_edge
+```
+
+```{r}
+tau_grid = exp(seq(-6, 6, length.out = 100))
+```
+
+```{r}
+# Support of underlying G (point mass l1, l2)
+l1_list = exp(log_edge + c(-2, -0.5, 0.5, 2))
+l2_list = exp(log_edge + c(-2, -0.5, 0.5, 2))
+```
+
+```{r}
+G_list = list()
+for (i in 1:length(l1_list)) {
+  if (i+1 > length(l2_list)) {
+    next
+  }
+  for (j in (i+1):length(l2_list)) {
+    l1_i = l1_list[i]
+    l2_j = l2_list[j]
+    G_i_j_grid_1D = c(l1_i, l2_j)
+    G_list[[length(G_list) + 1]] = G_i_j_grid_1D
+  }
+}
+```
+
+```{r}
+curve_G_list = list()
+counter = 1
+
+for (G_i in G_list) {
+  G_i_grid_1D = G_i
+  G_i_mass = c(0.5, 0.5)
+  curve_G_i = c()
+  for (tau_j in tau_grid) {
+    t_i_j = BF_pvalue_1DNPMLE_solver_positive(K1, K2, G_i_grid_1D, G_i_mass, tau_j, 0.05)
+    curve_G_i = c(curve_G_i, t_i_j)
+  }
+  curve_G_list[[counter]] = curve_G_i
+  counter = counter + 1
+}
+```
+
+```{r, fig.width=5}
+par(mar = c(5, 5, 4, 16))
+
+plot(x = log(tau_grid), y = curve_G_list[[1]], type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = expression(T[i]^{BF}), main = "curves with different underlying G with two point masses l1, l2", ylim = c(0, 4))
+
+#lines(x = log(tau_grid), y = -curve_G_list[[1]], col = 1, lty = 1, lwd = 2)
+
+for (i in 2:length(curve_G_list)) {
+  lines(x = log(tau_grid), y = curve_G_list[[i]], col = i, lty = 1, lwd = 2)
+  #lines(x = log(tau_grid), y = -curve_G_list[[i]], col = i, lty = 1, lwd = 2)
+}
+
+for (G_i in G_list) {
+  l1_i = G_i[1]
+  l2_i = G_i[2]
+  abline(v = log(l1_i), lty = 2)
+  abline(v = log(l2_i), lty = 2)
+}
+
+abline(v = log_edge, lty = 2, lwd = 2)
+
+legend("topright", legend = paste("log(l1) = ", round(log(sapply(G_list, function(pair) pair[1])), 3), "log(l2) = ", round(log(sapply(G_list, function(pair) pair[2])), 3)), col = 1:length(curve_G_list), lty = rep(1, length(curve_G_list)), inset = c(-0.55, 0), xpd = TRUE, lwd = 2)
+```
+
+
+```{r, fig.width=5}
+i = 5
+
+sub_curve_list = list()
+for (l_j in G_list[[i]]) {
+  G_j_grid_1D = c(l_j)
+  G_j_mass = c(1)
+  curve_G_j = c()
+  for (tau_k in tau_grid) {
+    t_j_k = BF_pvalue_1DNPMLE_solver_positive(K1, K2, G_j_grid_1D, G_j_mass, tau_k, 0.05)
+    curve_G_j = c(curve_G_j, t_j_k)
+  }
+  sub_curve_list[[length(sub_curve_list) + 1]] = curve_G_j
+}
+
+par(mar = c(5, 5, 4, 16))
+
+plot(x = log(tau_grid), y = curve_G_list[[i]], type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = expression(T[i]^{BF}), main = "curves with different underlying G with two point masses l1, l2", ylim = c(0, 4))
+
+lines(x = log(tau_grid), y = sub_curve_list[[1]], lwd = 2, lty = 2, col = 2)
+lines(x = log(tau_grid), y = sub_curve_list[[2]], lwd = 2, lty = 2, col = 3)
+
+abline(v = log(G_list[[i]][1]), lty = 2, col = 'green')
+abline(v = log(G_list[[i]][2]), lty = 2, col = 'purple')
+abline(v = log_edge, lty = 2, lwd = 2)
+abline(h = 1.96)
+
+legend("topright", legend = c(paste("log(l1) = ", round(log(G_list[[i]][1]), 3), "log(l2) = ", round(log(G_list[[i]][2]), 3)), paste('log(l1) = ', round(log(G_list[[i]][1]), 3)), paste('log(l2) = ', round(log(G_list[[i]][2]), 3))), col = 1:3, lty = c(1, 2, 2), inset = c(-0.55, 0), xpd = TRUE, lwd = 2)
+```
+
+```{r}
+# support
+log(G_list[[i]])
+
+# post mass on l1, l2
+tau = exp(1)
+post_mass_i = mass_given_tau_j(K1, K2, G_list[[i]], c(0.5, 0.5), tau_j = tau)
+post_mass_i
+```
+
+### Posterier G wrt KA, KB
+
+```{r}
+K1 = 20
+K2 = 8
+grid_1D = G_list[[5]]
+mass = c(0.5, 0.5)
+```
+
+```{r}
+post_l1_list = c()
+for (tau_j in tau_grid) {
+  post_mass = mass_given_tau_j(K1, K2, grid_1D, mass, tau = tau_j)
+  post_l1_list = c(post_l1_list, post_mass[1])
+}
+```
+
+```{r}
+par(mar = c(5, 5, 4, 16))
+
+plot(x = log(tau_grid), y = post_l1_list, type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = "g(l1)", main = paste("g(l1) wrt hat(lambda) with KA =", K1, ",KB =", K2), ylim = c(0, 1))
+
+abline(v = log(l_edge(K1, K2)), lty = 2, lwd = 2)
+abline(v = log(grid_1D[1]), lty = 2, lwd = 2, col = 4)
+```
+
+
+### Impact of KA, KB
+
+```{r}
+log(grid_1D)
+```
+
+```{r}
+l_edge_list = l_edge(K1, K2)
+log(l_edge_list)
+```
+
+```{r}
+curve_G_list = list()
+curve_G_main = c()
+for (tau_j in tau_grid) {
+  t_j = BF_pvalue_1DNPMLE_solver_positive(K1, K2, grid_1D, mass, tau_j, 0.05)
+  curve_G_main = c(curve_G_main, t_j)
+}
+curve_G_list[[1]] = curve_G_main
+```
+
+```{r}
+counter = 2
+for (l_i in grid_1D) {
+  curve_G_sub_i = c()
+  for (tau_j in tau_grid) {
+    t_i_j = BF_pvalue_1DNPMLE_solver_positive(K1, K2, c(l_i), c(1), tau_j, 0.05)
+    curve_G_sub_i = c(curve_G_sub_i, t_i_j)
+  }
+  curve_G_list[[counter]] = curve_G_sub_i
+  counter = counter + 1
+}
+
+```
+
+```{r, fig.width=5}
+par(mar = c(5, 5, 4, 16))
+
+plot(x = log(tau_grid), y = curve_G_list[[1]], type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = expression(T[i]^{BF}), main = paste("curves with K1 =", K1, ',K2 =', K2), ylim = c(0, 4))
+
+lines(x = log(tau_grid), y = curve_G_list[[2]], lwd = 2, lty = 2, col = 2)
+lines(x = log(tau_grid), y = curve_G_list[[3]], lwd = 2, lty = 2, col = 3)
+lines(x = log(tau_grid), y = post_l1_list, lwd = 2, lty = 3, col = 4)
+
+abline(v = log(grid_1D[1]), lty = 2, col = 'green')
+abline(v = log(grid_1D[2]), lty = 2, col = 'purple')
+abline(v = log(l_edge(K1, K2)), lty = 2, lwd = 2)
+
+legend("topright", legend = c(paste("log(l1) = ", round(log(G_list[[i]][1]), 3), "log(l2) = ", round(log(G_list[[i]][2]), 3)), paste('log(l1) = ', round(log(G_list[[i]][1]), 3)), paste('log(l2) = ', round(log(G_list[[i]][2]), 3)), 'post g(l1)'), col = 1:4, lty = c(1, 2, 2, 3), inset = c(-0.55, 0), xpd = TRUE, lwd = 2)
+```
+
+## Hedenfalk
+
+```{r}
+plotter_1D = function(df_1D, title) {
+  plot_1D = ggplot(df_1D, aes(x = log(x), y = 0)) +
+    geom_segment(aes(xend = log(x), yend = prob), size = 1, color = "blue") +
+    scale_y_continuous(name = "Density", limits = c(0, max(df_1D$prob))) +
+    scale_x_continuous(name = expression(log(lambda[i])), limits = c(-6, 6)) +
+    theme_minimal() +
+    labs(title = title,
+         x = expression(log(lambda[i]))) +
+    theme(plot.title = element_text(hjust = 0.5), 
+          axis.title = element_text(size = 24),
+          axis.text = element_text(size = 15))
+  return (plot_1D)
+}
+```
+
+
+```{r}
+K1 = 7
+K2 = 8
+log_edge = log(l_edge(K1, K2))
+log_edge
+```
+
+```{r}
+tau_grid = exp(seq(-6, 6, length.out = 100))
+```
+
+```{r}
+result_csv = read.csv('../Real Dataset Distribution/Real Dataset Distribution Data/Hedenfalk/2D_Hedenfalk.csv')
+```
+
+```{r}
+grid = result_csv[, 2:3]
+mass = result_csv[, 4]
+grid_1D = grid_2D[, 1] / grid_2D[, 2]
+```
+
+```{r}
+G_Hedenfalk = data.frame(x = grid_1D, prob = mass)
+```
+
+```{r}
+t_1DNPMLE_005 = c()
+
+for (tau in tau_grid) {
+  t_1DNPMLE_005_i = BF_pvalue_1DNPMLE_solver_positive(K1, K2, grid_1D, mass, tau, 0.05)
+  t_1DNPMLE_005 = append(t_1DNPMLE_005, t_1DNPMLE_005_i)
+}
+```
+
+```{r}
+plot(x = log(tau_grid), y = t_1DNPMLE_005, type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = expression(T[i]^{BF}), main = "T^BF curves of Hedenfalk", ylim = c(1, 3))
+
+abline(h = 1.96)
+```
+
+```{r}
+curve_approx = c()
+for (tau_j in tau_grid) {
+  print(count)
+  post_mass_j = mass_given_tau_j(K1, K2, grid_1D, mass, tau_j = tau_j)
+  t_j_approx = 0
+  for (i in 1:length(grid_1D)) {
+    l_i = grid_1D[i]
+    t_i = BF_pvalue_1DNPMLE_solver_positive(K1, K2, c(l_i), c(1), tau_j, 0.05)
+    t_j_approx = t_j_approx + t_i * post_mass_j[i]
+  }
+  curve_approx = c(curve_approx, t_j_approx)
+}
+```
+
+```{r}
+plot(x = log(tau_grid), y = t_1DNPMLE_005, type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = expression(T[i]^{BF}), main = "T^BF curves of Hedenfalk", ylim = c(1, 3))
+
+lines(x = log(tau_grid), y = curve_approx, lwd = 2, lty = 2, col = 2)
+
+legend('topright', legend = c('Real T^BF curve', 'Approximated T^BF curve'), lty = c(1,2), col = c(1,2), lwd = 2)
+```
+
+### Posterior Distribution given tau
+
+```{r}
+plotter_1D(G_Hedenfalk, 'G of Hedenfalk')
+```
+
+```{r}
+log_tau = -5
+tau = exp(log_tau)
+post_mass = mass_given_tau_j(K1, K2, grid_1D, mass, tau_j = tau)
+post_G_Hedenfalk = data.frame(x = grid_1D, prob = post_mass)
+title = paste('Posterier of G given log(tau) =', log_tau)
+plotter_1D(post_G_Hedenfalk, title)
+```
+
+```{r}
+grid_1D[order(post_mass, decreasing = TRUE)[1:5]]
+```
+
+### Impact of KA, KB
+
+```{r}
+K2 = 8
+r_list = exp(seq(-1, 1.5, length.out = 10))
+K2 * r_list
+```
+
+```{r}
+K1_list = c(3,4,5,9,12,16,21,27,36)
+```
+
+```{r}
+curve_G_list = list()
+counter = 1
+
+for (K1_i in K1_list) {
+  curve_G_i = c()
+  for (tau_j in tau_grid) {
+    t_i_j = BF_pvalue_1DNPMLE_solver_positive(K1_i, K2, grid_1D, mass, tau_j, 0.05)
+    curve_G_i = c(curve_G_i, t_i_j)
+  }
+  curve_G_list[[counter]] = curve_G_i
+  counter = counter + 1
+}
+```
+
+```{r}
+l_edge_list = l_edge(K1_list, K2)
+log(l_edge_list)
+```
+
+```{r, fig.width=5}
+par(mar = c(5, 5, 4, 16))
+
+plot(x = log(tau_grid), y = curve_G_list[[1]], type = "l", lwd = 2, col = 1, lty = 1, xlab = expression(log(hat(lambda[i]))), ylab = expression(T[i]^{BF}), main = "curves with different K1/K2", ylim = c(1, 4))
+
+for (i in 2:length(curve_G_list)) {
+  lines(x = log(tau_grid), y = curve_G_list[[i]], col = i, lty = i, lwd = 2)
+}
+
+legend("topright", legend = paste("log(K1/K2) = ", round(log(K1_list/K2), 3)), col = 1:length(curve_G_list), inset = c(-0.40, 0), xpd = TRUE, lwd = 2, lty = 1:length(curve_G_list))
+```
+
+
+

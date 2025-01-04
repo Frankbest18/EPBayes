@@ -7,6 +7,7 @@ output: pdf_document
 
 ```{r}
 source('Distribution Visualization helper.R')
+library(dplyr)
 ```
 
 # Hedenfalk
@@ -14,13 +15,18 @@ source('Distribution Visualization helper.R')
 ## 2D
 
 ```{r}
-df_2D_Hedenfalk = read.csv('./Real Dataset Distribution Data/2D_Hedenfalk.csv')
+df_2D_Hedenfalk = read.csv('./Real Dataset Distribution Data/Hedenfalk/2D_Hedenfalk.csv')
 ```
+
+```{r}
+head(df_2D_Hedenfalk)
+```
+
 
 ```{r, fig.width=12, fig.height=10}
 Total_mass = 0.99
-title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of the BRCA Data (Threshold = 0.99)'))
-plot_G_Hedenfalk = plotter_2D(Total_mass, df_2D_Hedenfalk, title)
+#title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of the BRCA Data (Threshold = 0.99)'))
+plot_G_Hedenfalk = plotter_2D(Total_mass, df_2D_Hedenfalk, '')
 plot_G_Hedenfalk
 ```
 
@@ -35,8 +41,8 @@ df_1D_Hedenfalk = data.frame(x = df_2D_Hedenfalk$x/df_2D_Hedenfalk$y, prob = df_
 ```
 
 ```{r, fig.width=8, fig.height=6}
-title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of the BRCA Data'))
-plot_1D_Hedenfalk = plotter_1D(df_1D_Hedenfalk, title)
+#title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of the BRCA Data'))
+plot_1D_Hedenfalk = plotter_1D(df_1D_Hedenfalk, '')
 plot_1D_Hedenfalk
 ```
 
@@ -77,8 +83,8 @@ df_2D_weighted_voom = read.csv('./Real Dataset Distribution Data/PBMC1/Mod vs HC
 
 ```{r, fig.width=12, fig.height=10}
 Total_mass = 0.99
-title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of PBMC1 based on Weights Estimated by Voom (Threshold = 0.99)'))
-plot_G_voom = plotter_2D(Total_mass, df_2D_weighted_voom, title)
+#title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of PBMC1 based on Weights Estimated by Voom (Threshold = 0.99)'))
+plot_G_voom = plotter_2D(Total_mass, df_2D_weighted_voom, '')
 plot_G_voom
 ```
 
@@ -94,7 +100,7 @@ df_lambda = data.frame(x = df_2D_weighted_voom$x/df_2D_weighted_voom$y, prob = d
 
 ```{r, fig.width=8, fig.height=6}
 title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of PBMC1 based on Weights estimated by Voom'))
-plot_1D_voom = plotter_1D(df_lambda, title)
+plot_1D_voom = plotter_1D(df_lambda, '')
 plot_1D_voom
 ```
 
@@ -133,7 +139,7 @@ df_2D_weighted_vbg = read.csv('./Real Dataset Distribution Data/PBMC1/Mod vs HC/
 ```{r, fig.width=12, fig.height=10}
 Total_mass = 0.99
 title = expression(paste(hat(H)({sigma[A]}^2, {sigma[B]}^2), ' of PBMC1 based on Weights estimated by VoombyGroup (Threshold = 0.99)'))
-plot_G_vbg = plotter_2D(Total_mass, df_2D_weighted_vbg, title)
+plot_G_vbg = plotter_2D(Total_mass, df_2D_weighted_vbg, '')
 plot_G_vbg
 ```
 
@@ -149,7 +155,7 @@ df_lambda_vbg = data.frame(x = df_2D_weighted_vbg$x/df_2D_weighted_vbg$y, prob =
 
 ```{r, fig.width=8, fig.height=6}
 title = expression(paste(hat(G)({sigma[A]}^2/{sigma[B]}^2), ' of PBMC1 based on Weights estimated by VoombyGroup'))
-plot_1D_vbg = plotter_1D(df_lambda_vbg, title)
+plot_1D_vbg = plotter_1D(df_lambda_vbg, '')
 plot_1D_vbg
 ```
 
@@ -189,10 +195,10 @@ df_lambda_with_ecdf_vbg = arrange(df_lambda_vbg, x) %>% mutate(ecdf = cumsum(pro
 
 ```{r}
 png("PBMC1 ecdf of G.png", width = 3200, height = 2400, res = 300)
-par(mgp = c(2,0.5,0))
-plot(log(df_lambda_with_ecdf$x), df_lambda_with_ecdf$ecdf, xlim = c(-2, 2), lwd = 2, type = 'l', col = 'blue', xlab = expression(log({sigma[A]}^2/{sigma[B]}^2)), ylab = expression(hat(G)({sigma[A]}^2/{sigma[B]}^2)))
-lines(log(df_lambda_with_ecdf_vbg$x), df_lambda_with_ecdf_vbg$ecdf, col = 'black', lwd = 2, type = 'l')
-legend('topleft', c(expression(paste(hat(G), ' with Voom')), expression(paste(hat(G), ' with VoombyGroup'))), col = c('blue', 'black'), lwd=2, lty = 1, cex = 1)
+par(mgp = c(3,1,0), mar = c(5,6,5,5), oma = c(0, 0, 0, 0))
+plot(log(df_lambda_with_ecdf$x), df_lambda_with_ecdf$ecdf, xlim = c(-2, 2), lwd = 3, type = 'l', col = 'blue', xlab = expression(log(lambda[i])), ylab = expression(hat(G)(lambda[i])), cex.lab = 2, cex.axis = 1.5 )
+lines(log(df_lambda_with_ecdf_vbg$x), df_lambda_with_ecdf_vbg$ecdf, col = 'black', lwd = 3, type = 'l')
+legend('topleft', c(expression(paste(hat(G), ' with Voom')), expression(paste(hat(G), ' with VoombyGroup'))), col = c('blue', 'black'), lwd=2, lty = 1, cex = 1.4 )
 dev.off()
 ```
 
