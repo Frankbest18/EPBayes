@@ -376,6 +376,46 @@ P_value_EV_NPMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, EV_NP
   return(P_value_list_EV_npmle)
 }
 
+# P value calculation of Welch-NPMLE
+
+p_given_lambda_welch = function(n1, n2, Z1, Z2, S1, S2, lambda) {
+  
+  upper = Z1 - Z2
+  lower = sqrt(S1/n1 + S2/n2)
+  
+  test_stat = upper/lower
+  
+  df_upper = (lambda + n1/n2)^2
+  df_lower = lambda^2 / (n1 - 1) + (n1/n2)^2 / (n2-1)
+  
+  df = df_upper / df_lower
+  
+  p = pt(q = abs(test_stat), df = df, lower.tail = FALSE) * 2
+  
+  out = p
+}
+
+p_value_welch_npmle_j = function(n1, n2, Z1, Z2, S1, S2, grid, mass, tau_j) {
+  P_value_joint = p_given_lambda_welch(n1, n2, Z1, Z2, S1, S2, grid)
+  post_mass_j = mass_given_tau_j(n1, n2, grid, mass, tau_j)
+  P_value_j = sum(P_value_joint * post_mass_j)
+  return (P_value_j)
+}
+
+P_value_Welch_NPMLE = function(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, Welch_NPMLE_1D_parameter) {
+  
+  tau = S1_list/S2_list
+  
+  NPMLE_result = NPMLE_1D(tau = tau, m = m, n1 = n1, n2 = n2, B = Welch_NPMLE_1D_parameter[1], lower_quantile = Welch_NPMLE_1D_parameter[2], upper_quantile = Welch_NPMLE_1D_parameter[3])
+  
+  P_value_list_wnpmle = rep(0, m)
+  for (i in c(1:m)) {
+    P_value_list_wnpmle[i] = p_value_welch_npmle_j(n1 = n1, n2 = n2, Z1 = Z1_list[i], Z2 = Z2_list[i], S1 = S1_list[i], S2 = S2_list[i], NPMLE_result$grid, NPMLE_result$mass, tau[i])
+  }
+  
+  return(P_value_list_wnpmle)
+}
+
 # BH, Power, FDR
 
 my_BH = function(P, alpha) {
@@ -498,7 +538,7 @@ dir_name = function(equ_var, n1, n2, data_generation_parameter, NPMLE_1D_paramet
   l2 = NPMLE_2D_parameter[3]
   u2 = NPMLE_2D_parameter[4]
   
-  base_dir = paste('Simulation_result_local/', equ, sep = '')
+  base_dir = paste('Simulation_result/', equ, sep = '')
   
   if (!dir.exists(base_dir)) {
     print('Create Base Directory')
@@ -519,8 +559,8 @@ file_name = function(rounds, algorithm_list) {
   return (paste('(', file, ')', sep = ''))
 }
 
-simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, alpha, rounds, algorithm_list, equ_var) {
-  
+simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, Welch_NPMLE_1D_parameter, alpha, rounds, algorithm_list, equ_var) {
+
   if (!dir.exists('Simulation_result')) {
     print('Create Data Directory')
     dir.create('Simulation_result')
@@ -541,15 +581,13 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     dir.create(dir)
   }
   
-  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch', 'B_F', 't_test', 'EV_NPMLE', 'EV2_NPMLE')
+  algorithm_name = c('1D_MLE', '1D_NPMLE', '2D_NPMLE', '1D_Proj', 'Welch', 'B_F', 't_test', 'EV_NPMLE', 'EV2_NPMLE', 'Welch_NPMLE')
   
-  FDP_of_algorithms = matrix(0, 9, rounds)
-  Power_of_algorithms = matrix(0, 9, rounds)
+  FDP_of_algorithms = matrix(0, 10, rounds)
+  Power_of_algorithms = matrix(0, 10, rounds)
   
   print('Simulation Start')
   print(paste('Parameters:', file.path(dir, file)))
-  
-  #P_list = NA
   
   r = 1
   
@@ -563,7 +601,6 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     X1 = output_r$X1
     X2 = output_r$X2
     flag_list = output_r$flag_list
-    #flag_list = rep(1, m)
     information = information_extractor(X1, X2)
     n1 = information$n1
     n2 = information$n2
@@ -589,7 +626,7 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
       }
       
-      else if (code == 2) {
+      if (code == 2) {
         print(paste('start of', algorithm_name[code]))
         P_list = P_value_1D_NPMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, NPMLE_1D_parameter)
         #hist(P_list, main = '1D_NPMLE', breaks = seq(0, 1, 0.025))
@@ -709,6 +746,18 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
         FDP_of_algorithms[code, r] = fdp
         print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
       }
+
+      if (code == 10) {
+        print(paste('start of', algorithm_name[code]))
+        P_list = P_value_Welch_NPMLE(n1, n2, m, Z1_list, Z2_list, S1_list, S2_list, Welch_NPMLE_1D_parameter)
+        discovery = my_BH(P_list, alpha)
+        power = Power(discovery, flag_list)
+        fdp = FDP(discovery, flag_list)
+        Power_of_algorithms[code, r] = power
+        FDP_of_algorithms[code, r] = fdp
+        print(c('round' = r, 'algorithm' = algorithm_name[code], 'power' = power, 'fdp' = fdp))
+      }
+
     }
     
     if (Rerun) {
@@ -720,9 +769,9 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
     
     print('Updating Round Data')
     
-    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r], 'B_F' = Power_of_algorithms[6, 1:r], 't_test' = Power_of_algorithms[7, 1:r], 'EV_NPMLE' = Power_of_algorithms[8, 1:r], 'EV2_NPMLE' = Power_of_algorithms[9, 1:r])
+    power_df_r = data.frame('Round (Power)' = c(1:r), '1D_MLE' = Power_of_algorithms[1, 1:r], '1D_NPMLE' = Power_of_algorithms[2, 1:r], '2D_NPMLE' = Power_of_algorithms[3, 1:r], '1D_Proj' = Power_of_algorithms[4, 1:r], 'Welch' = Power_of_algorithms[5, 1:r], 'B_F' = Power_of_algorithms[6, 1:r], 't_test' = Power_of_algorithms[7, 1:r], 'EV_NPMLE' = Power_of_algorithms[8, 1:r], 'EV2_NPMLE' = Power_of_algorithms[9, 1:r], 'Welch_NPMLE' = Power_of_algorithms[10, 1:r])
     write.csv(power_df_r, file = paste(file.path(dir, file), '_power.csv', sep = ''))
-    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r], 't_test' = FDP_of_algorithms[7, 1:r], 'EV_NPMLE' = FDP_of_algorithms[8, 1:r], 'EV2_NPMLE' = FDP_of_algorithms[9, 1:r])
+    fdp_df_r = data.frame('Round (FDP)' = c(1:r), '1D_MLE' = FDP_of_algorithms[1, 1:r], '1D_NPMLE' = FDP_of_algorithms[2, 1:r], '2D_NPMLE' = FDP_of_algorithms[3, 1:r], '1D_Proj' = FDP_of_algorithms[4, 1:r], 'Welch' = FDP_of_algorithms[5, 1:r], 'B_F' = FDP_of_algorithms[6, 1:r], 't_test' = FDP_of_algorithms[7, 1:r], 'EV_NPMLE' = FDP_of_algorithms[8, 1:r], 'EV2_NPMLE' = FDP_of_algorithms[9, 1:r], 'Welch_NPMLE' = FDP_of_algorithms[10, 1:r])
     write.csv(fdp_df_r, file = paste(file.path(dir, file), '_fdp.csv', sep = ''))
     
     r = r + 1
@@ -741,16 +790,17 @@ simulator = function(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_
 }
 
 alpha = 0.1
-rounds = 2
+rounds = 50
 NPMLE_1D_parameter = c(1000, 0.01, 1.0)
 NPMLE_2D_parameter = c(80, 80, 0.01, 1.0)
 EVD_NPMLE_1D_parameter = c(80, 0.01, 1.0)
 EV_NPMLE_1D_parameter = c(1000, 0.01, 1.0)
-algorithm_list = c(9)
+Welch_NPMLE_1D_parameter = c(1000, 0.01, 1.0)
+algorithm_list = c(10)
 equ_var = FALSE
 seed = Sys.time()
 data_generation_parameter = data.frame('k' = 2, 'd1' = 8, 'd2' = 12, 'm' = 5000, 'mu1' = 12, 'mu2' = 0, 'mean_var2' = 6, 'var_var2' = 4, 'pi0' = 0.9, 'mu0' = 0)
 
-result = simulator(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, alpha, rounds, algorithm_list, equ_var)
+result = simulator(seed, data_generation_parameter, NPMLE_1D_parameter, NPMLE_2D_parameter, EVD_NPMLE_1D_parameter, EV_NPMLE_1D_parameter, Welch_NPMLE_1D_parameter, alpha, rounds, algorithm_list, equ_var)
 
 print(result)
